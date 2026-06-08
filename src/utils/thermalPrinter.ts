@@ -75,7 +75,7 @@ export function generateEscPosReceipt(tx: Transaction, profile: { storeName: str
   }
   
   // Custom divider line
-  encoder.push(...Array.from(stringToBytes('-'.repeat(cols) + '\n')));
+  encoder.push(...Array.from(stringToBytes('='.repeat(cols) + '\n')));
 
   // Invoice identifiers
   encoder.push(...ESC_POS_COMMANDS.ALIGN_LEFT);
@@ -83,29 +83,26 @@ export function generateEscPosReceipt(tx: Transaction, profile: { storeName: str
   encoder.push(...Array.from(stringToBytes(`WAKTU : ${new Date(tx.timestamp).toLocaleString('id-ID')}\n`)));
   encoder.push(...Array.from(stringToBytes(`METODE: ${tx.paymentMethod}\n`)));
   
-  encoder.push(...Array.from(stringToBytes('-'.repeat(cols) + '\n')));
+  encoder.push(...Array.from(stringToBytes('='.repeat(cols) + '\n')));
 
   // Items table
   tx.items.forEach(item => {
-    // Left column: product name
-    // Right column: total price
-    // Sub-row: quantity sold x price
-    const nameStr = item.productName || 'Menu';
+    const nameStr = (item.productName || 'Menu').toUpperCase();
     const totalStr = `Rp ${(item.totalPrice).toLocaleString('id-ID')}`;
-    const qtyStr = `${item.quantity}x Rp ${(item.sellingPrice).toLocaleString('id-ID')}`;
+    const qtyStr = `${item.quantity} x Rp ${(item.sellingPrice).toLocaleString('id-ID')}`;
 
-    if (nameStr.length + totalStr.length + 1 <= cols) {
-      // Fit in one line
-      const spaceCount = cols - (nameStr.length + totalStr.length);
-      encoder.push(...Array.from(stringToBytes(nameStr + ' '.repeat(spaceCount) + totalStr + '\n')));
+    // Item name on its own line
+    encoder.push(...Array.from(stringToBytes(nameStr + '\n')));
+    
+    // Right-aligned item total pricing inline with the item quantities calculation details
+    const spaceCount = cols - (qtyStr.length + totalStr.length + 2); // 2 spaces indent
+    if (spaceCount > 0) {
+      encoder.push(...Array.from(stringToBytes('  ' + qtyStr + ' '.repeat(spaceCount) + totalStr + '\n')));
     } else {
-      // Truncate or flow product name, then total on right
-      encoder.push(...Array.from(stringToBytes(nameStr + '\n')));
-      const spaceCount = cols - totalStr.length;
-      encoder.push(...Array.from(stringToBytes(' '.repeat(spaceCount) + totalStr + '\n')));
+      const fallbackSpace = cols - totalStr.length;
+      encoder.push(...Array.from(stringToBytes('  ' + qtyStr + '\n')));
+      encoder.push(...Array.from(stringToBytes(' '.repeat(Math.max(2, fallbackSpace)) + totalStr + '\n')));
     }
-    // Sub-details row
-    encoder.push(...Array.from(stringToBytes('  ' + qtyStr + '\n')));
   });
 
   encoder.push(...Array.from(stringToBytes('-'.repeat(cols) + '\n')));
@@ -120,16 +117,17 @@ export function generateEscPosReceipt(tx: Transaction, profile: { storeName: str
 
   // Cash count and exchange details
   const paidStr = `Rp ${(tx.amountPaid).toLocaleString('id-ID')}`;
-  const paidLabel = 'Uang Diterima:';
+  const paidLabel = 'Uang Tunai:';
   const paidSpace = cols - (paidLabel.length + paidStr.length);
   encoder.push(...Array.from(stringToBytes(paidLabel + ' '.repeat(Math.max(1, paidSpace)) + paidStr + '\n')));
 
   const changeStr = `Rp ${(tx.change).toLocaleString('id-ID')}`;
-  const changeLabel = 'Uang Kembalian:';
+  const changeLabel = 'Uang Kembali:';
   const changeSpace = cols - (changeLabel.length + changeStr.length);
   encoder.push(...Array.from(stringToBytes(changeLabel + ' '.repeat(Math.max(1, changeSpace)) + changeStr + '\n')));
 
-  encoder.push(...Array.from(stringToBytes('-'.repeat(cols) + '\n')));
+  // Elegant footer boundary
+  encoder.push(...Array.from(stringToBytes('='.repeat(cols) + '\n')));
 
   // Receipt Footer Banner
   encoder.push(...ESC_POS_COMMANDS.ALIGN_CENTER);
@@ -138,7 +136,8 @@ export function generateEscPosReceipt(tx: Transaction, profile: { storeName: str
   encoder.push(...ESC_POS_COMMANDS.BOLD_OFF);
   encoder.push(...Array.from(stringToBytes('Sistem Kasir Pintar HPPOS\n')));
   
-  // Extra feeds & cuts
+  // Compact paper feed & cut to guarantee readability without wasting blank paper lengths
+  encoder.push(...Array.from(stringToBytes('\n')));
   encoder.push(...ESC_POS_COMMANDS.FEED_2);
   encoder.push(...ESC_POS_COMMANDS.FEED_3_CUT);
 
@@ -155,15 +154,28 @@ export function generateTestReceipt(profile: { storeName: string; address: strin
   encoder.push(...ESC_POS_COMMANDS.BOLD_ON);
   encoder.push(...Array.from(stringToBytes('TEST UTILITY SUKSES\n')));
   encoder.push(...ESC_POS_COMMANDS.BOLD_OFF);
-  encoder.push(...Array.from(stringToBytes('-'.repeat(cols) + '\n')));
+  encoder.push(...Array.from(stringToBytes('='.repeat(cols) + '\n')));
   encoder.push(...Array.from(stringToBytes((profile.storeName || 'COBA KASIR HPPOS').toUpperCase() + '\n')));
   encoder.push(...Array.from(stringToBytes('Koneksi Printer Berhasil Aktif!\n')));
-  encoder.push(...Array.from(stringToBytes('-'.repeat(cols) + '\n')));
+  encoder.push(...Array.from(stringToBytes('--------------------------------\n'.slice(0, cols))));
   encoder.push(...Array.from(stringToBytes(`Waktu: ${new Date().toLocaleString()}\n`)));
+  encoder.push(...Array.from(stringToBytes('================================\n'.slice(0, cols))));
+  
+  // Compact paper feed & cut to guarantee readability without wasting paper
+  encoder.push(...Array.from(stringToBytes('\n')));
   encoder.push(...ESC_POS_COMMANDS.FEED_2);
   encoder.push(...ESC_POS_COMMANDS.FEED_3_CUT);
   return new Uint8Array(encoder);
 }
+
+// Global Bluetooth disconnection handler to clear stale GATT cache targets instantly
+const handleBluetoothDisconnect = () => {
+  console.log('Bluetooth connection disconnected or timeout. Clearing cached characteristics.');
+  bluetoothCharacteristicCache = null;
+};
+
+// Helper utility for non-blocking pacing delays between BLE packet frames
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Connect to thermal printer via Bluetooth (using Web Bluetooth API)
@@ -198,6 +210,11 @@ export async function connectBluetoothDevice(): Promise<PrinterDeviceState> {
     }
 
     bluetoothDeviceCache = device;
+    
+    // Wire up global disconnect listener so that stale characteristic references are cleared immediately
+    device.removeEventListener('gattserverdisconnected', handleBluetoothDisconnect);
+    device.addEventListener('gattserverdisconnected', handleBluetoothDisconnect);
+
     const server = await device.gatt?.connect();
     
     // Find writable characteristics
@@ -234,6 +251,8 @@ export async function connectBluetoothDevice(): Promise<PrinterDeviceState> {
     let errorMsg = err.message || 'Gagal menyambung perangkat BT';
     if (errorMsg.includes('permissions policy') || errorMsg.includes('disallowed') || err.name === 'SecurityError') {
       errorMsg = 'Keamanan iFrame: Akses Bluetooth diblokir oleh kebijakan keamanan iFrame browser. Silakan buka aplikasi pada Tab Baru (klik ikon Buka di Tab Baru di sudut kanan atas panel pratinjau) untuk menggunakan fitur printer Bluetooth secara langsung!';
+    } else if (errorMsg.includes('failed to connect') || errorMsg.includes('Connection attempt failed') || errorMsg.includes('GATT') || err.name === 'NetworkError') {
+      errorMsg = 'Koneksi Gagal: Percobaan koneksi ke printer Bluetooth gagal. Pastikan unit printer dinyalakan, jaraknya dekat, baterainya tidak lemah, dan tidak sedang tersambung ke aplikasi kasir/HP lain.';
     }
     return {
       type: 'bluetooth',
@@ -289,21 +308,107 @@ export async function connectUsbDevice(): Promise<PrinterDeviceState> {
 }
 
 /**
+ * Ensure the Bluetooth device GATT server and characteristic are connected.
+ * This is crucial for mobile and battery-powered thermal printers that often disconnect aggressively.
+ */
+async function ensureBluetoothGattConnected(): Promise<boolean> {
+  if (!bluetoothDeviceCache) {
+    return false;
+  }
+
+  try {
+    if (bluetoothDeviceCache.gatt?.connected && bluetoothCharacteristicCache) {
+      return true;
+    }
+
+    console.log('Bluetooth GATT Server is disconnected. Reconnecting...');
+    
+    // Wire up global disconnect listener again on reconnection
+    bluetoothDeviceCache.removeEventListener('gattserverdisconnected', handleBluetoothDisconnect);
+    bluetoothDeviceCache.addEventListener('gattserverdisconnected', handleBluetoothDisconnect);
+
+    const server = await bluetoothDeviceCache.gatt?.connect();
+    if (!server) {
+      throw new Error('Koneksi Gagal: GATT Server tidak merespon saat dihubungkan kembali.');
+    }
+
+    // Discover the primary services and write characteristic again after reconnection
+    console.log('Discovering primary services after reconnection...');
+    const services = await server.getPrimaryServices();
+    let writeChar: any = null;
+
+    if (services) {
+      for (const service of services) {
+        const characteristics = await service.getCharacteristics();
+        for (const char of characteristics) {
+          if (char.properties.write || char.properties.writeWithoutResponse) {
+            writeChar = char;
+            break;
+          }
+        }
+        if (writeChar) break;
+      }
+    }
+
+    if (!writeChar) {
+      throw new Error('Koneksi Gagal: Printer terhubung kembali, tetapi karakteristik penulisan data (write characteristic) tidak ditemukan.');
+    }
+
+    bluetoothCharacteristicCache = writeChar;
+    console.log('Successfully re-established Bluetooth write characteristic.');
+    return true;
+  } catch (err: any) {
+    console.error('Error in ensureBluetoothGattConnected:', err);
+    const errMsg = err.message || '';
+    if (err.name === 'NetworkError' || errMsg.includes('failed') || errMsg.includes('disconnected') || errMsg.includes('GATT') || errMsg.includes('connection') || errMsg.includes('connect')) {
+      throw new Error('Sambungan ke printer Bluetooth terputus atau gagal tersambung kembali. Pastikan printer menyala, berjarak dekat, daya baterai cukup, dan tidak terpairing ke handphone/perangkat lain secara eksklusif. Silakan nyalakan ulang bluetooth/printer dan klik Pair ulang di tab Profil Toko jika perlu.');
+    }
+    throw err;
+  }
+}
+
+/**
  * Dispatch byte streams to the connected active thermal printer hardware
  */
 export async function sendToActivePrinter(data: Uint8Array): Promise<boolean> {
-  // Try Bluetooth first
-  if (bluetoothCharacteristicCache) {
-    try {
-      // Split buffer chunk into smaller 20-byte arrays to comply with MTU limitations of thermal BLE devices
-      const mtu = 20;
-      for (let i = 0; i < data.length; i += mtu) {
-        const chunk = data.slice(i, i + mtu);
-        await bluetoothCharacteristicCache.writeValue(chunk);
+  // Try Bluetooth first if a device has been paired
+  if (bluetoothDeviceCache || bluetoothCharacteristicCache) {
+    const isReady = await ensureBluetoothGattConnected();
+    if (isReady && bluetoothCharacteristicCache) {
+      try {
+        // Split buffer chunk into smaller 20-byte arrays to comply with MTU limitations of thermal BLE devices
+        const mtu = 20;
+        for (let i = 0; i < data.length; i += mtu) {
+          const chunk = data.slice(i, i + mtu);
+          // Try with fallback for writeValue without response if writeValue is not optimal or throws
+          await bluetoothCharacteristicCache.writeValue(chunk);
+          // 15ms pacing delay gives the printer's microcontroller sufficient time to digest packets and avoid buffer overflow
+          await sleep(15);
+        }
+        return true;
+      } catch (e: any) {
+        console.error('BLE write failed:', e);
+        // If it failed because it disconnected or server was lost, try to reconnect one more time
+        if (e.message?.includes('disconnected') || e.message?.includes('GATT') || e.message?.includes('connect')) {
+          console.log('Disconnected during transfer. Attempting Bluetooth reconnection and retry...');
+          const retryReady = await ensureBluetoothGattConnected();
+          if (retryReady && bluetoothCharacteristicCache) {
+            try {
+              const mtu = 20;
+              for (let i = 0; i < data.length; i += mtu) {
+                const chunk = data.slice(i, i + mtu);
+                await bluetoothCharacteristicCache.writeValue(chunk);
+                await sleep(15);
+              }
+              return true;
+            } catch (retryErr: any) {
+              console.error('BLE retry write failed:', retryErr);
+              throw new Error(`Koneksi Bluetooth terputus saat pencetakan: ${retryErr.message || 'GATT write error'}`);
+            }
+          }
+        }
+        throw new Error(`Gagal mengirim data Bluetooth: ${e.message || 'GATT write error'}`);
       }
-      return true;
-    } catch (e) {
-      console.error('BLE write failed:', e);
     }
   }
 
@@ -314,8 +419,9 @@ export async function sendToActivePrinter(data: Uint8Array): Promise<boolean> {
       const endpointNumber = 1; // Generic endpoint out
       await usbDeviceCache.transferOut(endpointNumber, data);
       return true;
-    } catch (e) {
+    } catch (e: any) {
       console.error('USB transfer failed:', e);
+      throw new Error(`Gagal mengirim data melalui USB: ${e.message || 'transferOut error'}`);
     }
   }
 

@@ -17,16 +17,44 @@ import PointOfSale from './components/PointOfSale';
 import TransactionHistory from './components/TransactionHistory';
 import FinanceReport from './components/FinanceReport';
 import StoreProfileManager from './components/StoreProfileManager';
+import AIRestockAdvisor from './components/AIRestockAdvisor';
+import QuickStartModal from './components/QuickStartModal';
 
 // Visual Assets
 import { 
-  LayoutDashboard, ShoppingBag, Layers, History, Sparkles, BarChart3, Menu, X, Store
+  LayoutDashboard, ShoppingBag, Layers, History, Sparkles, BarChart3, Menu, X, Store, Wifi, WifiOff, HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [quickStartOpen, setQuickStartOpen] = useState(false);
+  
+  // Connection & Auto-Sync tracking states
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const triggerSyncIndicator = () => {
+    setIsSyncing(true);
+    const id = setTimeout(() => {
+      setIsSyncing(false);
+    }, 1200);
+    return id;
+  };
   
   // Persistent States
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -45,6 +73,7 @@ export default function App() {
     const rawProd = localStorage.getItem('hppos_products');
     const rawTx = localStorage.getItem('hppos_transactions');
     const rawProfile = localStorage.getItem('hppos_profile');
+    const rawQuickStartDismissed = localStorage.getItem('hppos_quickstart_dismissed');
 
     if (rawIng) {
       setIngredients(JSON.parse(rawIng));
@@ -73,28 +102,60 @@ export default function App() {
       setProfile(INITIAL_PROFILE);
       localStorage.setItem('hppos_profile', JSON.stringify(INITIAL_PROFILE));
     }
+
+    if (!rawQuickStartDismissed) {
+      setQuickStartOpen(true);
+    }
   }, []);
 
-  // Sync helpers
+  // Sync helpers with non-blocking async localStorage persistence
   const saveIngredients = (newIng: Ingredient[]) => {
     setIngredients(newIng);
-    localStorage.setItem('hppos_ingredients', JSON.stringify(newIng));
+    setTimeout(() => {
+      try {
+        localStorage.setItem('hppos_ingredients', JSON.stringify(newIng));
+        triggerSyncIndicator();
+      } catch (err) {
+        console.error("Local Storage Error:", err);
+      }
+    }, 0);
   };
 
   const saveProducts = (newProd: Product[]) => {
     setProducts(newProd);
-    localStorage.setItem('hppos_products', JSON.stringify(newProd));
+    setTimeout(() => {
+      try {
+        localStorage.setItem('hppos_products', JSON.stringify(newProd));
+        triggerSyncIndicator();
+      } catch (err) {
+        console.error("Local Storage Error:", err);
+      }
+    }, 0);
   };
 
   const saveProfile = (newProfile: StoreProfile) => {
     setProfile(newProfile);
-    localStorage.setItem('hppos_profile', JSON.stringify(newProfile));
+    setTimeout(() => {
+      try {
+        localStorage.setItem('hppos_profile', JSON.stringify(newProfile));
+        triggerSyncIndicator();
+      } catch (err) {
+        console.error("Local Storage Error:", err);
+      }
+    }, 0);
   };
 
   const addTransaction = (newTx: Transaction) => {
     const updated = [newTx, ...transactions];
     setTransactions(updated);
-    localStorage.setItem('hppos_transactions', JSON.stringify(updated));
+    setTimeout(() => {
+      try {
+        localStorage.setItem('hppos_transactions', JSON.stringify(updated));
+        triggerSyncIndicator();
+      } catch (err) {
+        console.error("Local Storage Error:", err);
+      }
+    }, 0);
 
     // Deduct stock levels for ingredients used in the transaction items
     let stockChanged = false;
@@ -131,7 +192,14 @@ export default function App() {
     const txToDelete = transactions.find(t => t.id === id);
     const updated = transactions.filter(t => t.id !== id);
     setTransactions(updated);
-    localStorage.setItem('hppos_transactions', JSON.stringify(updated));
+    setTimeout(() => {
+      try {
+        localStorage.setItem('hppos_transactions', JSON.stringify(updated));
+        triggerSyncIndicator();
+      } catch (err) {
+        console.error("Local Storage Error:", err);
+      }
+    }, 0);
 
     // Restore stock levels for ingredients used in the deleted transaction
     if (txToDelete) {
@@ -166,12 +234,24 @@ export default function App() {
 
   const clearTransactions = () => {
     setTransactions([]);
-    localStorage.setItem('hppos_transactions', JSON.stringify([]));
+    setTimeout(() => {
+      try {
+        localStorage.setItem('hppos_transactions', JSON.stringify([]));
+        triggerSyncIndicator();
+      } catch (err) {
+        console.error("Local Storage Error:", err);
+      }
+    }, 0);
   };
+
+  const lowStockCount = (ingredients || []).filter(
+    ing => (ing.stock ?? 0) < (ing.minStock ?? 0)
+  ).length;
 
   const navTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'bahan', label: 'Database Bahan', icon: ClipboardIcon },
+    { id: 'restock', label: 'Restock AI ✨', icon: Sparkles },
     { id: 'kalkulasi', label: 'Formulasi HPP', icon: Layers },
     { id: 'kasir', label: 'Kasir POS', icon: ShoppingBag },
     { id: 'riwayat', label: 'Riwayat Nota', icon: History },
@@ -190,17 +270,69 @@ export default function App() {
       <header className="sticky top-0 z-40 bg-slate-900/40 backdrop-blur-md border-b border-white/10 text-white no-print">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20 border border-indigo-400/30">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20 border border-indigo-400/30 font-sans relative">
               <Sparkles className="w-5.5 h-5.5 text-white" />
+              {lowStockCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full ring-2 ring-slate-900 animate-pulse"></span>
+              )}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="font-heading font-black text-base tracking-tight text-white">
                   {profile.storeName ? profile.storeName : "HPPOS"}
                 </h1>
                 <span className="hidden sm:inline-block text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-indigo-500/30">
                   KASIR PINTAR
                 </span>
+
+                {/* Connection Status Indicator */}
+                <div 
+                  title={isOnline ? "Aplikasi tersambung ke Internet" : "Aplikasi berjalan dalam mode mandiri offline"}
+                  className={`flex items-center gap-1.5 text-[9px] font-black px-2 py-0.5 rounded-full tracking-wider border select-none transition-all duration-300 ${
+                    isOnline 
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                      : 'bg-rose-500/15 text-rose-400 border-rose-500/20 animate-pulse'
+                  }`}
+                >
+                  {isOnline ? (
+                    <>
+                      <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
+                      <span className="hidden xs:inline">Online</span>
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="w-2.5 h-2.5" />
+                      <span>Offline</span>
+                    </>
+                  )}
+                </div>
+
+                {/* High-Performance Local Save Indicator */}
+                <AnimatePresence>
+                  {isSyncing && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8, x: -6 }}
+                      animate={{ opacity: 1, scale: 1, x: 0 }}
+                      exit={{ opacity: 0, scale: 0.8, x: 6 }}
+                      className="hidden sm:flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>
+                      <span>Disimpan</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Guide trigger button */}
+                <button
+                  id="header-quickstart-btn"
+                  title="Buka panduan cepat penggunaan"
+                  type="button"
+                  onClick={() => setQuickStartOpen(true)}
+                  className="flex items-center gap-1.5 text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-full border bg-indigo-650/10 bg-indigo-600/10 hover:bg-indigo-600/20 hover:text-white border-indigo-500/25 text-indigo-300 cursor-pointer transition-all active:scale-95"
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Panduan</span>
+                </button>
               </div>
               <p className="text-[11px] text-slate-400">Pencatat Harga Pokok Penjualan & Kasir Mikro UMKM</p>
             </div>
@@ -219,14 +351,24 @@ export default function App() {
                     setActiveTab(tab.id);
                     setMenuOpen(false);
                   }}
-                  className={`py-2 px-3.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-all ${
+                  className={`py-2 px-3.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-all relative ${
                     isActive 
                       ? 'bg-white/10 hover:bg-white/15 text-white border border-white/20 shadow-lg' 
                       : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
                   }`}
                 >
-                  <TabIcon className="w-4 h-4" />
-                  {tab.label}
+                  <div className="relative flex items-center gap-1.5">
+                    <TabIcon className="w-4 h-4" />
+                    {tab.label}
+                    {tab.id === 'bahan' && lowStockCount > 0 && (
+                      <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-black bg-rose-500 text-white rounded-full leading-none shadow-md shadow-rose-950/25">
+                        {lowStockCount}
+                      </span>
+                    )}
+                    {tab.id === 'dashboard' && lowStockCount > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 absolute top-0 -right-1.5 animate-ping"></span>
+                    )}
+                  </div>
                 </button>
               );
             })}
@@ -236,10 +378,13 @@ export default function App() {
           <button
             id="hamburger-btn"
             onClick={() => setMenuOpen(!menuOpen)}
-            className="lg:hidden p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-white cursor-pointer transition-all"
+            className="lg:hidden p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-white cursor-pointer transition-all relative"
             aria-label="Toggle Menu Layout"
           >
             {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {lowStockCount > 0 && !menuOpen && (
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-550 bg-rose-500 rounded-full ring-2 ring-slate-900 animate-pulse"></span>
+            )}
           </button>
         </div>
 
@@ -265,14 +410,24 @@ export default function App() {
                       setActiveTab(tab.id);
                       setMenuOpen(false);
                     }}
-                    className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center gap-3 cursor-pointer transition-all ${
+                    className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-between cursor-pointer transition-all ${
                       isActive
-                        ? 'bg-indigo-650 bg-indigo-600 text-white shadow-md font-bold'
+                        ? 'bg-indigo-650 bg-indigo-600 text-white shadow-md font-bold1'
                         : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
                     }`}
                   >
-                    <TabIcon className="w-4.5 h-4.5" />
-                    {tab.label}
+                    <div className="flex items-center gap-3">
+                      <TabIcon className="w-4.5 h-4.5" />
+                      {tab.label}
+                    </div>
+                    {tab.id === 'bahan' && lowStockCount > 0 && (
+                      <span className="px-2 py-0.5 text-[9px] font-black bg-rose-500 text-white rounded-full leading-none shadow-md">
+                        {lowStockCount} REBELANJA
+                      </span>
+                    )}
+                    {tab.id === 'dashboard' && lowStockCount > 0 && (
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+                    )}
                   </button>
                 );
               })}
@@ -280,6 +435,23 @@ export default function App() {
           )}
         </AnimatePresence>
       </header>
+
+      {/* Elegant Warning Alert Bar for Offline mode */}
+      <AnimatePresence>
+        {!isOnline && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-amber-500/10 border-b border-amber-500/20 text-amber-300 text-xs text-center py-2 px-4 flex items-center justify-center gap-2 font-medium z-30"
+          >
+            <WifiOff className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span>
+              <strong>Mode Offline Aktif</strong>: Pencatatan kasir dan database stok bahan berjalan penuh secara lokal. Analisis <strong>Restock AI Gemini</strong> memerlukan koneksi internet.
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* RENDER VIEW MODULE PANELS */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 lg:pb-8 z-10 relative">
@@ -304,6 +476,15 @@ export default function App() {
               <IngredientManager 
                 ingredients={ingredients} 
                 onSaveIngredients={saveIngredients} 
+              />
+            )}
+            
+            {activeTab === 'restock' && (
+              <AIRestockAdvisor 
+                ingredients={ingredients} 
+                products={products} 
+                transactions={transactions} 
+                isOnline={isOnline}
               />
             )}
             
@@ -357,11 +538,16 @@ export default function App() {
             setActiveTab('dashboard');
             setMenuOpen(false);
           }}
-          className={`flex flex-col items-center gap-1 cursor-pointer transition-all ${
+          className={`flex flex-col items-center gap-1 cursor-pointer transition-all relative ${
             activeTab === 'dashboard' ? 'text-indigo-400 font-bold' : 'text-slate-400'
           }`}
         >
-          <LayoutDashboard className="w-5 h-5" />
+          <div className="relative">
+            <LayoutDashboard className="w-5 h-5" />
+            {lowStockCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full animate-ping"></span>
+            )}
+          </div>
           <span className="scale-90 text-[10px]">Beranda</span>
         </button>
 
@@ -372,11 +558,18 @@ export default function App() {
             setActiveTab('bahan');
             setMenuOpen(false);
           }}
-          className={`flex flex-col items-center gap-1 cursor-pointer transition-all ${
+          className={`flex flex-col items-center gap-1 cursor-pointer transition-all relative ${
             activeTab === 'bahan' ? 'text-indigo-400 font-bold' : 'text-slate-400'
           }`}
         >
-          <ClipboardIcon className="w-5 h-5" />
+          <div className="relative">
+            <ClipboardIcon className="w-5 h-5" />
+            {lowStockCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 px-1 bg-rose-500 text-white rounded-full text-[8.5px] font-black scale-90 leading-tight">
+                {lowStockCount}
+              </span>
+            )}
+          </div>
           <span className="scale-90 text-[10px]">Bahan</span>
         </button>
 
@@ -436,6 +629,16 @@ export default function App() {
           <p className="opacity-75">Didesain dengan Cinta untuk Kesejahteraan Pengusaha Kuliner, Katering & Ritel Indonesia.</p>
         </div>
       </footer>
+
+      {/* Quick Start Guide Modal */}
+      <QuickStartModal 
+        isOpen={quickStartOpen} 
+        onClose={() => {
+          setQuickStartOpen(false);
+          localStorage.setItem('hppos_quickstart_dismissed', 'true');
+        }} 
+        onNavigateToTab={(tab) => setActiveTab(tab)}
+      />
     </div>
   );
 }

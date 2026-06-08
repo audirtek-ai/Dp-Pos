@@ -50,6 +50,7 @@ export interface Product {
   profitAmount: number; // sellingPrice - hpp
   marginPercent: number; // (profit/sellingPrice) * 100
   imageUrl?: string;
+  barcode?: string; // Barcode or SKU for camera scanning
 }
 
 export interface CartItem {
@@ -95,5 +96,7 @@ export interface StoreProfile {
   address: string;
   phone: string;
   receiptFooter: string;
+  receiptTheme?: string; // Tampilan invoice: 'classic' | 'retro' | 'elegant' | 'cyber' | 'eco'
+  logoUrl?: string; // base64 or URL of the custom store logo
 }
 

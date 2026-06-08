@@ -32,6 +32,7 @@ export default function ProductCalculator({ products, ingredients, onSaveProduct
   const [overheads, setOverheads] = useState<OverheadItem[]>([]);
   const [sellingPrice, setSellingPrice] = useState<number>(0);
   const [imageUrl, setImageUrl] = useState('');
+  const [barcode, setBarcode] = useState('');
 
   // Local helper form states
   const [selectedingId, setSelectedIngId] = useState('');
@@ -65,6 +66,7 @@ export default function ProductCalculator({ products, ingredients, onSaveProduct
     setOverheads([]);
     setSellingPrice(0);
     setImageUrl('');
+    setBarcode('');
     setFormError('');
   };
 
@@ -80,6 +82,7 @@ export default function ProductCalculator({ products, ingredients, onSaveProduct
     setOverheads(prod.overheads);
     setSellingPrice(prod.sellingPrice);
     setImageUrl(prod.imageUrl || '');
+    setBarcode(prod.barcode || '');
     setFormError('');
   };
 
@@ -196,7 +199,8 @@ export default function ProductCalculator({ products, ingredients, onSaveProduct
       markupPercent: Number(markupPercent.toFixed(2)),
       profitAmount: Number(profitAmount.toFixed(2)),
       marginPercent: Number(marginPercent.toFixed(2)),
-      imageUrl: finalImageUrl
+      imageUrl: finalImageUrl,
+      barcode: barcode.trim()
     };
 
     if (editingId) {
@@ -297,9 +301,16 @@ export default function ProductCalculator({ products, ingredients, onSaveProduct
                     {/* Description Box */}
                     <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                       <div className="space-y-1.5">
-                        <h3 className="font-heading font-bold text-white text-base leading-snug">
-                          {prod.name}
-                        </h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-heading font-bold text-white text-base leading-snug">
+                            {prod.name}
+                          </h3>
+                          {prod.barcode && (
+                            <span className="text-[9px] font-mono bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded font-bold" title="Kode Barcode/SKU">
+                              [||| {prod.barcode}]
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
                           {prod.description || 'Tidak ada deskripsi resep.'}
                         </p>
@@ -403,7 +414,7 @@ export default function ProductCalculator({ products, ingredients, onSaveProduct
               {/* SECTION 1: Master Details Info */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-white/5 pb-5">
                 <div className="md:col-span-2 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label htmlFor="prod-name-input" className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
                         Nama Produk <span className="text-red-400">*</span>
@@ -434,6 +445,30 @@ export default function ProductCalculator({ products, ingredients, onSaveProduct
                         <option value="Jasa" className="bg-slate-950">Jasa / Katering</option>
                         <option value="Lainnya" className="bg-slate-950">Lainnya / Paket</option>
                       </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="prod-barcode-input" className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                        Barcode / SKU <span className="text-slate-500 text-[10px]">(Opsional)</span>
+                      </label>
+                      <div className="flex gap-1.5">
+                        <input
+                          id="prod-barcode-input"
+                          type="text"
+                          placeholder="Contoh: 899123456"
+                          className="w-full bg-slate-905 bg-slate-900/60 border border-white/10 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-hidden focus:border-indigo-500 transition-all font-medium placeholder:text-slate-500 font-mono text-indigo-300"
+                          value={barcode}
+                          onChange={(e) => setBarcode(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setBarcode(Math.floor(100000000 + Math.random() * 900000000).toString())}
+                          className="px-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-[10.5px] font-bold text-slate-300 rounded-xl cursor-pointer transition-all active:scale-95"
+                          title="Generate Barcode Acak"
+                        >
+                          Acak
+                        </button>
+                      </div>
                     </div>
                   </div>
 

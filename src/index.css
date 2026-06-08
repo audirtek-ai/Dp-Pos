@@ -73,7 +73,7 @@ body {
   }
 
   /* Reset outer container margins and page constraints */
-  body, html, #root, main {
+  body, html {
     background: #ffffff !important;
     background-color: #ffffff !important;
     color: #000000 !important;
@@ -83,6 +83,13 @@ body {
     height: auto !important;
     box-shadow: none !important;
     overflow: visible !important;
+  }
+
+  #root {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
   }
 
   /* Center physical layout */
@@ -132,4 +139,58 @@ body {
     color: #404040 !important;
   }
 }
+
+/* Custom CSS overrides for html5-qrcode camera scanner */
+#pos-barcode-reader {
+  border: none !important;
+  color: #f3f4f6 !important;
+  background-color: rgb(3 7 18 / 0.8) !important; /* Slate-950 backdrop option */
+  font-family: inherit !important;
+}
+
+#pos-barcode-reader img {
+  display: none !important; /* Hid default ugly illustration */
+}
+
+#pos-barcode-reader button {
+  background-color: #4f46e5 !important; /* Indigo-600 */
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  padding: 8px 16px !important;
+  border-radius: 12px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease-in-out !important;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25) !important;
+  margin: 6px auto !important;
+  display: inline-block !important;
+}
+
+#pos-barcode-reader button:hover {
+  background-color: #4338ca !important; /* Indigo-700 */
+  transform: translateY(-1px);
+}
+
+#pos-barcode-reader button:active {
+  transform: translateY(0);
+}
+
+#pos-barcode-reader select {
+  background-color: #111827 !important; /* Gray-900 */
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  padding: 8px 12px !important;
+  border-radius: 10px !important;
+  font-size: 11px !important;
+  margin: 6px auto 12px auto !important;
+  outline: none !important;
+  display: block !important;
+  max-width: 90% !important;
+}
+
+#pos-barcode-reader select:focus {
+  border-color: #6366f1 !important; /* Indigo-500 */
+}
+
 

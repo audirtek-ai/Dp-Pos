@@ -117,6 +117,29 @@ export default function Dashboard({ transactions, products, ingredients, onNavig
 
   return (
     <div className="space-y-6">
+      {/* Dashboard Top Header & Dynamic Stock Indicator Badge */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900/35 border border-white/5 p-4 rounded-2xl">
+        <div className="space-y-1 text-left">
+          <h2 className="text-base font-black tracking-tight text-white flex items-center gap-2">
+            Ringkasan Bisnis & Performa Toko
+          </h2>
+          <p className="text-[11px] text-slate-400">Analisis real-time omzet, modal, efisiensi bahan, dan kesehatan profit usaha Anda.</p>
+        </div>
+        
+        {/* Dynamic Badge Warning Indicators based on severity */}
+        {lowStockIngredients.length > 0 ? (
+          <div className="flex items-center gap-2 px-3  py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold animate-pulse">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>{lowStockIngredients.length} Bahan Baku Kritis (Butuh Restock)</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>Semua Stok Bahan Baku Aman</span>
+          </div>
+        )}
+      </div>
+
       {/* KPI Stats Cards Bento Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Revenue */}
@@ -226,14 +249,24 @@ export default function Dashboard({ transactions, products, ingredients, onNavig
             </div>
           </div>
 
-          <button
-            id="btn-navigate-ingredients"
-            onClick={() => onNavigateToTab('bahan')}
-            className="w-full md:w-auto mt-2 md:mt-0 font-bold text-xs inline-flex items-center justify-center gap-1.5 text-red-350 bg-red-500/10 hover:bg-red-500/20 px-4 py-2.5 rounded-xl border border-red-500/30 cursor-pointer transition-all shadow-xl flex-shrink-0 text-red-300"
-          >
-            Belanja / Kelola Stok
-            <ArrowRight className="w-4 h-4" />
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto mt-2 md:mt-0 flex-shrink-0">
+            <button
+              id="btn-navigate-ingredients"
+              onClick={() => onNavigateToTab('bahan')}
+              className="w-full sm:w-auto font-bold text-xs inline-flex items-center justify-center gap-1.5 text-slate-300 bg-white/5 hover:bg-white/10 px-4 py-2.5 rounded-xl border border-white/10 cursor-pointer transition-all shadow-xl"
+            >
+              Kelola Stok
+            </button>
+            <button
+              id="btn-navigate-ai-restock"
+              onClick={() => onNavigateToTab('restock')}
+              className="w-full sm:w-auto font-bold text-xs inline-flex items-center justify-center gap-1.5 text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 px-4 py-2.5 rounded-xl border border-indigo-500/30 cursor-pointer transition-all shadow-xl"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Prediksi Restock AI
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         </motion.div>
       )}
 

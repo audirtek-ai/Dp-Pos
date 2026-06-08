@@ -3,16 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Product, CartItem, Transaction, StoreProfile } from '../types';
 import { formatRupiah, formatPercent } from '../utils';
 import { 
   ShoppingCart, Plus, Minus, Trash2, Search, ArrowRight, Eye, EyeOff,
-  Sparkles, Check, ShoppingBag, Receipt, Printer, X, RefreshCw, Bluetooth, Usb
+  Sparkles, Check, ShoppingBag, Receipt, Printer, X, RefreshCw, Bluetooth, Usb,
+  Barcode, Camera, QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { generateEscPosReceipt, sendToActivePrinter } from '../utils/thermalPrinter';
+import ReceiptThemeView from './ReceiptThemeView';
 
 interface PointOfSaleProps {
   products: Product[];
@@ -29,8 +32,100 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
   const [showOwnerStats, setShowOwnerStats] = useState(true); // Toggle to show/hide transaction margin
   const [showReceipt, setShowReceipt] = useState<Transaction | null>(null);
   const [printMode, setPrintMode] = useState<'standard' | 'thermal'>('standard');
+  const [activeTheme, setActiveTheme] = useState('classic');
   const [thermalStatus, setThermalStatus] = useState('');
   const [isPrintingThermal, setIsPrintingThermal] = useState(false);
+
+  // Barcode / Camera scanning states
+  const [isScannerActive, setIsScannerActive] = useState(false);
+  const [scannerError, setScannerError] = useState('');
+  const [scannerSuccessMsg, setScannerSuccessMsg] = useState('');
+
+  useEffect(() => {
+    if (profile.receiptTheme) {
+      setActiveTheme(profile.receiptTheme);
+    }
+  }, [profile.receiptTheme]);
+
+  // Camera Barcode Scanner Effect
+  useEffect(() => {
+    let qrcodeScanner: Html5QrcodeScanner | null = null;
+    if (isScannerActive) {
+      setScannerError('');
+      setScannerSuccessMsg('');
+      const timer = setTimeout(() => {
+        try {
+          qrcodeScanner = new Html5QrcodeScanner(
+            "pos-barcode-reader",
+            { 
+              fps: 12, 
+              qrbox: { width: 260, height: 160 },
+              aspectRatio: 1.0,
+              showTorchButtonIfSupported: true
+            },
+            /* verbose= */ false
+          );
+
+          qrcodeScanner.render(
+            (decodedText) => {
+              // Beep sound indicator upon success
+              try {
+                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                if (AudioContextClass) {
+                  const audioCtx = new AudioContextClass();
+                  const osc = audioCtx.createOscillator();
+                  const gain = audioCtx.createGain();
+                  osc.connect(gain);
+                  gain.connect(audioCtx.destination);
+                  osc.frequency.setValueAtTime(1200, audioCtx.currentTime); // high peak pos sound
+                  gain.gain.setValueAtTime(0, audioCtx.currentTime);
+                  gain.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 0.04);
+                  gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.15);
+                  osc.start(audioCtx.currentTime);
+                  osc.stop(audioCtx.currentTime + 0.16);
+                }
+              } catch (beepErr) {
+                console.log("Beep ignored or blocked by gesture context", beepErr);
+              }
+
+              // Look for matched product in master index (either by barcode string OR direct id match)
+              const matchedProd = products.find(
+                p => (p.barcode && p.barcode.trim() === decodedText.trim()) || p.id === decodedText.trim()
+              );
+
+              if (matchedProd) {
+                addToCart(matchedProd);
+                setScannerSuccessMsg(`✓ Berhasil menambahkan ${matchedProd.name} ke keranjang!`);
+                setScannerError('');
+                
+                // clear success message after 3 seconds
+                setTimeout(() => setScannerSuccessMsg(''), 3000);
+              } else {
+                setScannerError(`Barcode "${decodedText}" belum terdaftar.`);
+                // clear error after 4 seconds
+                setTimeout(() => setScannerError(''), 4000);
+              }
+            },
+            (error) => {
+              // Silence frame parsing failures
+            }
+          );
+        } catch (initErr: any) {
+          console.error("Camera Scanner failed to initialize: ", initErr);
+          setScannerError("Gagal mengaktifkan kamera. Pastikan memberikan izin akses kamera perangkat.");
+        }
+      }, 400);
+
+      return () => {
+        clearTimeout(timer);
+        if (qrcodeScanner) {
+          qrcodeScanner.clear().catch(err => {
+            console.warn("Error clearing qrcode scanner: ", err);
+          });
+        }
+      };
+    }
+  }, [isScannerActive, products]);
 
   const handlePrintHardwareThermal = async () => {
     if (!showReceipt) return;
@@ -100,7 +195,9 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
   // Categories
   const categories = ['Semua', 'Makanan', 'Minuman', 'Jasa', 'Lainnya'];
   const filteredProducts = products.filter(prod => {
-    const matchesSearch = prod.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = prod.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          prod.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (prod.barcode && prod.barcode.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory = selectedCategory === 'Semua' || prod.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -179,17 +276,17 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* PRODUCTS DISPLAY GRID PANEL (8 cols in desktop) */}
       <div className="lg:col-span-7 space-y-5">
-        <div className="bg-white p-4 rounded-xl shadow-xs border border-slate-100 flex flex-col sm:flex-row gap-3 justify-between items-center">
+        <div className="glass-panel p-4 rounded-xl flex flex-col sm:flex-row gap-3 justify-between items-center shadow-xl">
           {/* Categories Tab Pill */}
-          <div className="flex gap-1 overflow-x-auto w-full sm:w-auto py-1">
+          <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto py-1">
             {categories.map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`py-1.5 px-3.5 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer transition-all ${
+                className={`py-1.5 px-3.5 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer transition-all border ${
                   selectedCategory === cat 
-                    ? 'bg-primary-600 text-white shadow-xs' 
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20' 
+                    : 'bg-white/5 border-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
                 }`}
               >
                 {cat}
@@ -197,23 +294,45 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
             ))}
           </div>
 
-          {/* Search bar pill */}
-          <div className="relative w-full sm:w-60">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input
-              id="pos-search"
-              type="text"
-              placeholder="Cari menu barang..."
-              className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-lg pl-9 pr-3 py-1.5 text-xs focus:outline-hidden focus:ring-1 focus:ring-primary-500 placeholder:text-slate-400"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          {/* Search bar & Barcode section */}
+          <div className="flex gap-2 w-full sm:w-auto items-center">
+            <div className="relative flex-1 sm:w-60">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+              <input
+                id="pos-search"
+                type="text"
+                placeholder="Cari nama, kategori, barcode..."
+                className="w-full bg-slate-950/40 border border-white/10 text-white rounded-xl pl-9 pr-8 py-2 text-xs focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-450 hover:text-white cursor-pointer p-1 rounded-full hover:bg-white/10 focus:outline-hidden"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            
+            <button
+              id="camera-scanner-trigger-btn"
+              type="button"
+              onClick={() => setIsScannerActive(true)}
+              className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-550 border border-indigo-500/30 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 transition-all h-[32px]"
+              title="Scan Barcode Produk Menggunakan Kamera HP/Laptop"
+            >
+              <Camera className="w-4 h-4" />
+              <span className="hidden sm:inline">Scan</span>
+            </button>
           </div>
         </div>
 
         {/* Dynamic products catalog cards */}
         {filteredProducts.length === 0 ? (
-          <div className="bg-white p-12 text-center rounded-2xl border border-slate-100 text-slate-400">
+          <div className="glass-panel p-12 text-center rounded-2xl border border-white/10 text-slate-400">
             Tidak ada produk cocok. Pastikan Anda telah membuat atau memformulasikan HPP produk terlebih dahulu di tab <strong>Kalkulator HPP</strong>.
           </div>
         ) : (
@@ -226,36 +345,36 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
                   key={prod.id}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => addToCart(prod)}
-                  className="bg-white rounded-xl overflow-hidden border border-slate-150-100 flex flex-col justify-between shadow-xs hover:shadow-md hover:border-emerald-200 cursor-pointer transition-all relative group"
+                  className="glass-panel bg-slate-900/20 rounded-2xl overflow-hidden border border-white/10 flex flex-col justify-between shadow-lg hover:shadow-2xl hover:border-indigo-500/50 hover:shadow-indigo-500/5 cursor-pointer transition-all relative group"
                 >
-                  <div className="h-28 bg-slate-100 relative">
+                  <div className="h-28 bg-slate-950/40 relative">
                     <img 
                       src={prod.imageUrl} 
                       alt={prod.name} 
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover opacity-90 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
                       referrerPolicy="no-referrer"
                     />
                     
                     {inCartCount > 0 && (
-                      <div className="absolute top-2 right-2 w-6 h-6 bg-primary-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-sm">
+                      <div className="absolute top-2.5 right-2.5 w-6 h-6 bg-indigo-605 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs font-black shadow-lg shadow-indigo-600/35 border border-indigo-400/20">
                         {inCartCount}
                       </div>
                     )}
 
-                    <div className="absolute bottom-1 bg-slate-900/40 backdrop-blur-xs text-[9px] px-2 py-0.5 rounded text-white m-1">
+                    <div className="absolute bottom-2 left-2 bg-slate-950/70 border border-white/15 backdrop-blur-xs text-[9px] font-semibold px-2.5 py-0.5 rounded-lg text-slate-300">
                       {prod.category}
                     </div>
                   </div>
 
-                  <div className="p-3 space-y-1.5 flex-1 flex flex-col justify-between">
-                    <h4 className="font-heading font-medium text-xs text-slate-800 line-clamp-2 leading-snug group-hover:text-emerald-700">
+                  <div className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
+                    <h4 className="font-heading font-bold text-xs text-slate-200 line-clamp-2 leading-snug group-hover:text-white transition-colors">
                       {prod.name}
                     </h4>
-                    <div className="flex flex-col">
-                      <span className="font-mono text-xs font-bold text-slate-900">
+                    <div className="flex flex-col pt-1 border-t border-white/5">
+                      <span className="font-mono text-xs font-extrabold text-indigo-300">
                         {formatRupiah(prod.sellingPrice)}
                       </span>
-                      <span className="text-[9px] text-slate-400 mt-0.5">
+                      <span className="text-[9px] text-slate-450 text-slate-400 mt-0.5 font-mono">
                         HPP: {formatRupiah(prod.calculatedHppPerUnit)}
                       </span>
                     </div>
@@ -268,17 +387,17 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
       </div>
 
       {/* POS REALTIME KASIR SALES CART (5 cols in desktop) */}
-      <div className="lg:col-span-5 bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden flex flex-col justify-between sticky top-4">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+      <div className="lg:col-span-5 glass-panel bg-slate-900/35 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col justify-between sticky top-4">
+        <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
           <div className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-emerald-600" />
-            <h3 className="font-heading font-semibold text-sm text-slate-800">Keranjang Kasir</h3>
+            <ShoppingBag className="w-5 h-5 text-indigo-400" />
+            <h3 className="font-heading font-black text-sm text-white">Keranjang Kasir</h3>
           </div>
           {cart.length > 0 && (
             <button
               id="clear-cart-btn"
               onClick={clearCart}
-              className="text-[11px] text-red-500 hover:text-red-700 font-semibold cursor-pointer"
+              className="text-[11px] text-rose-450 text-rose-405 hover:text-rose-350 text-rose-400 font-extrabold cursor-pointer hover:underline transition-all"
             >
               Kosongkan
             </button>
@@ -286,55 +405,55 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
         </div>
 
         {/* Cart Item lists */}
-        <div className="flex-1 overflow-y-auto min-h-[220px] max-h-[350px] p-4 divide-y divide-slate-100">
+        <div className="flex-1 overflow-y-auto min-h-[220px] max-h-[350px] p-4 divide-y divide-white/5">
           {cart.length === 0 ? (
-            <div className="text-center py-16 text-slate-400 space-y-2 flex flex-col items-center">
-              <ShoppingCart className="w-10 h-10 text-slate-300" />
-              <p className="text-xs">Keranjang masih kosong</p>
-              <p className="text-[10px] text-slate-400 max-w-xs">Ketuk produk di sebelah kiri untuk menambah ke antrean pembayaran.</p>
+            <div className="text-center py-16 text-slate-400 space-y-3 flex flex-col items-center">
+              <ShoppingCart className="w-10 h-10 text-slate-500" />
+              <p className="text-xs font-semibold text-slate-300">Keranjang masih kosong</p>
+              <p className="text-[10px] text-slate-500 max-w-xs leading-normal">Ketuk produk di sebelah kiri untuk menambah ke antrean pembayaran.</p>
             </div>
           ) : (
             cart.map(item => (
-              <div key={item.product.id} className="py-3 flex justify-between items-center first:pt-0 last:pb-0">
-                <div className="flex-1 pr-3">
-                  <h5 className="font-medium text-xs text-slate-800 leading-normal line-clamp-1">
+              <div key={item.product.id} className="py-3 flex justify-between items-center first:pt-0 last:pb-0 border-transparent">
+                <div className="flex-1 pr-3 text-left">
+                  <h5 className="font-bold text-xs text-white leading-normal line-clamp-1">
                     {item.product.name}
                   </h5>
-                  <div className="font-mono text-xs text-slate-400 mt-0.5">
+                  <div className="font-mono text-[11px] text-slate-400 mt-0.5">
                     {formatRupiah(item.product.sellingPrice)} x {item.quantity}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                   {/* Quantity adjustments */}
-                  <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
+                  <div className="flex items-center border border-white/10 rounded-xl overflow-hidden bg-slate-950/40">
                     <button
                       id={`dec-qty-${item.product.id}`}
                       onClick={() => updateQuantity(item.product.id, -1)}
-                      className="px-2 py-1 hover:bg-slate-150-200 text-slate-600 cursor-pointer"
+                      className="px-2 py-1.5 hover:bg-white/10 text-slate-300 cursor-pointer transition-colors"
                     >
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="px-2.5 font-mono text-xs font-bold text-slate-800 bg-white">
+                    <span className="px-2.5 font-mono text-xs font-black text-white">
                       {item.quantity}
                     </span>
                     <button
                       id={`inc-qty-${item.product.id}`}
                       onClick={() => updateQuantity(item.product.id, 1)}
-                      className="px-2 py-1 hover:bg-slate-150-200 text-slate-600 cursor-pointer"
+                      className="px-2 py-1.5 hover:bg-white/10 text-slate-300 pointer-events-auto cursor-pointer transition-colors"
                     >
                       <Plus className="w-3 h-3" />
                     </button>
                   </div>
 
-                  <strong className="font-mono text-xs text-slate-900 w-20 text-right">
+                  <strong className="font-mono text-xs text-indigo-300 w-20 text-right">
                     {formatRupiah(item.product.sellingPrice * item.quantity)}
                   </strong>
 
                   <button
                     id={`remove-item-${item.product.id}`}
                     onClick={() => removeFromCart(item.product.id)}
-                    className="p-1 text-slate-300 hover:text-red-500 rounded cursor-pointer"
+                    className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-white/5 rounded transition-all cursor-pointer"
                     title="Hapus"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -347,16 +466,16 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
 
         {/* OWNER VIEW: Dynamic profit analysis */}
         {cart.length > 0 && (
-          <div className="bg-emerald-50/50 border-t border-b border-emerald-100 p-3.5 px-4 space-y-2">
+          <div className="bg-emerald-950/15 border-t border-b border-emerald-500/20 p-3.5 px-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-emerald-800 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                Mode Pemilik: Analisis Keuntungan
+              <span className="text-[11px] font-extrabold text-emerald-400 flex items-center gap-1.5 uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                Analisis Margin Pemilik
               </span>
               <button
                 id="toggle-owner-view"
                 onClick={() => setShowOwnerStats(!showOwnerStats)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="text-slate-400 hover:text-white cursor-pointer transition-all"
                 title="Sembunyikan/Tampilkan Analisis Laba"
               >
                 {showOwnerStats ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -364,14 +483,14 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
             </div>
 
             {showOwnerStats && (
-              <div className="grid grid-cols-2 gap-3 bg-white p-2.5 rounded-xl border border-emerald-105-100 text-xs">
+              <div className="grid grid-cols-2 gap-3 bg-slate-950/50 p-3 rounded-xl border border-white/5 text-xs text-left">
                 <div>
-                  <span className="block text-[9px] font-semibold text-slate-400 uppercase">HPP Modal Terjual</span>
-                  <span className="font-mono font-bold text-slate-800">{formatRupiah(totalHppCost)}</span>
+                  <span className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">HPP Modal</span>
+                  <span className="font-mono font-bold text-slate-300">{formatRupiah(totalHppCost)}</span>
                 </div>
                 <div>
-                  <span className="block text-[9px] font-semibold text-slate-400 uppercase">Estimasi Laba Bersih</span>
-                  <span className="font-mono font-bold text-emerald-600">+{formatRupiah(expectedProfit)} <span className="font-sans text-[10px]">({formatPercent(expectedMargin)})</span></span>
+                  <span className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">Untung Bersih</span>
+                  <span className="font-mono font-black text-emerald-400">+{formatRupiah(expectedProfit)} <span className="font-sans text-[10px] font-normal">({formatPercent(expectedMargin)})</span></span>
                 </div>
               </div>
             )}
@@ -380,16 +499,16 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
 
         {/* Check out Form Area */}
         {cart.length > 0 && (
-          <form onSubmit={handleCheckout} className="p-4 space-y-4 bg-slate-50 border-t border-slate-100">
+          <form onSubmit={handleCheckout} className="p-4 space-y-4 bg-white/[0.015] border-t border-white/5">
             {/* Total sales bill view */}
             <div className="flex justify-between items-center py-1">
-              <span className="text-sm font-semibold text-slate-700">Total Tagihan</span>
-              <strong className="font-mono text-xl font-extrabold text-slate-900">{formatRupiah(totalBill)}</strong>
+              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Total Tagihan</span>
+              <strong className="font-mono text-xl font-black text-emerald-400 leading-none">{formatRupiah(totalBill)}</strong>
             </div>
 
             {/* Payment options */}
-            <div className="space-y-1.5">
-              <label htmlFor="select-payment-method" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">Metode Pembayaran</label>
+            <div className="space-y-1.5 text-left">
+              <label htmlFor="select-payment-method" className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Metode Pembayaran</label>
               <div className="grid grid-cols-3 gap-2">
                 {['Tunai', 'QRIS', 'Transfer'].map(method => (
                   <button
@@ -399,10 +518,10 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
                       setPaymentMethod(method);
                       if (method !== 'Tunai') setAmountPaid(totalBill);
                     }}
-                    className={`py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all border text-center ${
+                    className={`py-2 rounded-xl text-xs font-bold cursor-pointer transition-all border text-center ${
                       paymentMethod === method 
-                        ? 'bg-slate-900 border-slate-900 text-white' 
-                        : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                        ? 'bg-indigo-650 bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/15' 
+                        : 'bg-white/5 border-white/10 hover:bg-white/10 hover:text-white text-slate-300'
                     }`}
                   >
                     {method}
@@ -413,40 +532,40 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
 
             {/* Cash nominal box */}
             {paymentMethod === 'Tunai' && (
-              <div className="space-y-3 pt-1">
+              <div className="space-y-3 pt-1 text-left">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label htmlFor="cash-input" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Diterima (Cash)</label>
+                    <label htmlFor="cash-input" className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Diterima (Cash)</label>
                     <div className="relative">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">Rp</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
                       <input
                         id="cash-input"
                         type="number"
                         min={totalBill}
                         required
                         placeholder="Uang Tunai"
-                        className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl pl-7 pr-2 py-2 text-xs font-mono font-bold focus:outline-hidden"
+                        className="w-full bg-slate-950/40 border border-white/10 text-white rounded-xl pl-8 pr-2.5 py-2.5 text-xs font-mono font-black focus:outline-hidden focus:border-indigo-500"
                         value={amountPaid === '' ? '' : amountPaid}
                         onChange={(e) => setAmountPaid(e.target.value === '' ? '' : Number(e.target.value))}
                       />
                     </div>
                   </div>
                   <div>
-                    <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Kembalian</span>
-                    <div className="bg-white border border-slate-200 py-2 px-3 rounded-xl font-mono text-xs font-bold text-slate-800">
+                    <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Kembalian</span>
+                    <div className="bg-slate-950/40 border border-white/10 py-2.5 px-3 rounded-xl font-mono text-xs font-black text-emerald-400 h-[38px] flex items-center">
                       {formatRupiah(changeDue)}
                     </div>
                   </div>
                 </div>
 
                 {/* Cash suggestion pill shortcuts */}
-                <div className="flex gap-1.5 flex-wrap">
+                <div className="flex gap-1.5 flex-wrap pt-0.5">
                   {getQuickCashSuggestions().map((sug, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => setAmountPaid(sug)}
-                      className="text-[10px] font-mono px-2 py-1 bg-white hover:bg-slate-200 border border-slate-250 rounded-lg cursor-pointer transition-all text-slate-700 hover:text-slate-900"
+                      className="text-[10px] font-mono px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg cursor-pointer transition-all text-slate-300 hover:text-white"
                     >
                       {sug === totalBill ? 'Uang Pas' : formatRupiah(sug)}
                     </button>
@@ -459,9 +578,9 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
             <button
               id="confirm-checkout-btn"
               type="submit"
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-all shadow-xs inline-flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-555 hover:bg-emerald-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-600/25 inline-flex items-center justify-center gap-2 cursor-pointer border border-emerald-400/30"
             >
-              <Receipt className="w-4 h-4" />
+              <Receipt className="w-4 h-4 text-white" />
               Proses Transaksi Penjualan
             </button>
           </form>
@@ -477,14 +596,14 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-white rounded-2xl border border-slate-300 shadow-2xl max-w-sm w-full p-5 text-slate-800 space-y-3.5 my-auto max-h-[92vh] flex flex-col justify-between"
+                className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-sm w-full p-5 text-slate-300 space-y-3.5 my-auto max-h-[92vh] flex flex-col justify-between"
               >
                 {/* Receipt Header Icon */}
-                <div className="text-center space-y-1 pb-1.5 border-b border-dashed border-slate-200 shrink-0">
-                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                <div className="text-center space-y-1 pb-1.5 border-b border-dashed border-white/10 shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-emerald-950/40 text-emerald-400 flex items-center justify-center mx-auto">
                     <Check className="w-5.5 h-5.5" />
                   </div>
-                  <h3 className="font-heading font-black text-xs text-slate-950 tracking-tight uppercase">
+                  <h3 className="font-heading font-black text-xs text-white tracking-tight uppercase">
                     TRANSAKSI SELESAI
                   </h3>
                   <p className="text-[10px] text-slate-400 font-mono">
@@ -493,197 +612,80 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
                 </div>
 
                 {/* Format selection toggles */}
-                <div className="space-y-1 shrink-0">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Format Cetakan</span>
-                  <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
-                    <button 
-                      id="print-mode-standard-btn"
-                      type="button"
-                      onClick={() => setPrintMode('standard')} 
-                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${printMode === 'standard' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-                    >
-                      Nota Standar
-                    </button>
-                    <button 
-                      id="print-mode-thermal-btn"
-                      type="button"
-                      onClick={() => setPrintMode('thermal')} 
-                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${printMode === 'thermal' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-                    >
-                      Printer Thermal (58mm)
-                    </button>
+                <div className="space-y-1.5 shrink-0 text-left">
+                  <div className="flex md:flex-row flex-col gap-2.5">
+                    <div className="flex-1 space-y-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Format Cetakan</span>
+                      <div className="flex gap-1.5 p-1 bg-slate-950/45 border border-white/5 rounded-xl">
+                        <button 
+                          id="print-mode-standard-btn"
+                          type="button"
+                          onClick={() => setPrintMode('standard')} 
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${printMode === 'standard' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-450 hover:text-slate-200'}`}
+                        >
+                          Nota Standar
+                        </button>
+                        <button 
+                          id="print-mode-thermal-btn"
+                          type="button"
+                          onClick={() => setPrintMode('thermal')} 
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${printMode === 'thermal' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-450 hover:text-slate-200'}`}
+                        >
+                          Thermal (58mm)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 space-y-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Desain Invoice</span>
+                      <div className="flex gap-1 p-1 bg-slate-950/45 border border-white/5 rounded-xl overflow-x-auto scrollbar-none">
+                        {[
+                          { id: 'classic', label: 'Classic', icon: '📝' },
+                          { id: 'retro', label: 'Retro', icon: '⭐' },
+                          { id: 'elegant', label: 'Elegant', icon: '⚜️' },
+                          { id: 'cyber', label: 'Cyber', icon: '🤖' },
+                          { id: 'eco', label: 'Eco', icon: '🌱' },
+                        ].map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setActiveTheme(t.id)}
+                            className={`flex-1 py-1.5 px-1 rounded-md text-[9px] font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-0.5 ${activeTheme === t.id ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-450 hover:text-slate-200'}`}
+                            title={t.label}
+                          >
+                            <span>{t.icon}</span>
+                            <span className="sr-only sm:not-sr-only sm:inline">{t.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {/* Pseudo Physical Receipt layout viewport container */}
-                <div className="max-h-[220px] sm:max-h-[280px] overflow-y-auto p-1 bg-slate-50 border border-slate-150 rounded-xl flex-1 min-h-[140px]">
+                <div className="max-h-[280px] overflow-y-auto p-1.5 bg-slate-950/35 border border-white/10 rounded-xl flex-1 min-h-[140px] transition-all">
                   {/* Print layout section */}
                   <div 
                     id="print-thermal-receipt"
-                    className={printMode === 'thermal' ? 'thermal-receipt-layout bg-white text-black p-2 font-mono' : 'print-receipt-section bg-white text-slate-800 p-3 font-sans text-xs'}
+                    className={printMode === 'thermal' ? 'thermal-receipt-layout bg-white text-black p-3 font-mono border border-slate-100' : 'print-receipt-section bg-white text-slate-800 p-4 font-sans text-xs rounded-lg border border-slate-100'}
                     style={{ color: '#000000', backgroundColor: '#ffffff' }}
                   >
-                    {/* Dynamic Header */}
-                    <div className="text-center pb-2">
-                      <h4 className="font-heading font-black text-xs text-slate-900 uppercase tracking-tight leading-tight">
-                        {profile.storeName || 'TOKO MERCHANT SAYA'}
-                      </h4>
-                      <p className="text-[9px] text-slate-500 font-sans leading-tight mt-0.5" style={{ color: '#4b5563' }}>
-                        {profile.address || 'Alamat Toko Belum Diatur'}
-                      </p>
-                      {profile.phone && (
-                        <p className="text-[9px] text-slate-500 font-sans" style={{ color: '#4b5563' }}>
-                          Telp: {profile.phone}
-                        </p>
-                      )}
-                      <div className="text-[8px] text-slate-400 font-mono mt-1.5 border-t border-b border-dashed border-slate-200 py-1" style={{ color: '#6b7280' }}>
-                        INV: {showReceipt.invoiceNumber}<br />
-                        Tgl: {new Date(showReceipt.timestamp).toLocaleString('id-ID')}
-                      </div>
-                    </div>
-
-                    {/* Body dividers */}
-                    {printMode === 'thermal' ? (
-                      <div className="font-mono text-[8.5px] leading-relaxed py-1">
-                        <div className="border-b border-dashed border-slate-300 pb-1 mb-1">
-                          ITEM & JUMLAH
-                        </div>
-                        {showReceipt.items.map((it, idx) => (
-                          <div key={idx} className="space-y-0.5 pb-1 flex justify-between items-start text-black font-mono">
-                            <div className="max-w-[70%]">
-                              <div>{it.productName}</div>
-                              <div className="text-[8px] scale-95 origin-left text-slate-500">
-                                {it.quantity} x {formatRupiah(it.sellingPrice)}
-                              </div>
-                            </div>
-                            <span className="font-bold shrink-0">{formatRupiah(it.totalPrice)}</span>
-                          </div>
-                        ))}
-                        <div className="border-t border-dashed border-slate-300 pt-1.5 mt-1.5 space-y-1">
-                          <div className="flex justify-between font-extrabold text-black">
-                            <span>TOTAL TAGIHAN:</span>
-                            <span>{formatRupiah(showReceipt.totalSales)}</span>
-                          </div>
-                          <div className="flex justify-between text-slate-500 text-[8px]">
-                            <span>Metode:</span>
-                            <span className="uppercase">{showReceipt.paymentMethod}</span>
-                          </div>
-                          <div className="flex justify-between text-[8px] text-slate-600">
-                            <span>Diterima:</span>
-                            <span>{formatRupiah(showReceipt.amountPaid)}</span>
-                          </div>
-                          <div className="flex justify-between text-[8px] text-slate-600">
-                            <span>Kembali:</span>
-                            <span>{formatRupiah(showReceipt.change)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="font-sans leading-relaxed py-1">
-                        <div className="border-b border-slate-100 pb-1.5 mb-1.5 font-bold text-slate-500 text-[9px] uppercase tracking-wider">
-                          Rincian Belanja
-                        </div>
-                        <table className="w-full text-left text-xs border-collapse table-fixed">
-                          <thead>
-                            <tr className="border-b border-slate-100 text-slate-400 text-[9px] uppercase">
-                              <th className="pb-1.5 font-semibold w-1/2">Menu</th>
-                              <th className="pb-1.5 text-center font-semibold w-1/12 font-mono">Qty</th>
-                              <th className="pb-1.5 text-right font-semibold w-[20%]">Harga</th>
-                              <th className="pb-1.5 text-right font-semibold w-[20%]">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50">
-                            {showReceipt.items.map((it, idx) => (
-                              <tr key={idx} className="text-slate-700 align-top">
-                                <td className="py-1.5 pr-2 font-medium text-slate-900 break-words leading-relaxed">{it.productName}</td>
-                                <td className="py-1.5 text-center text-slate-500 font-mono">{it.quantity}</td>
-                                <td className="py-1.5 text-right font-mono text-[10px] text-slate-500 whitespace-nowrap">{formatRupiah(it.sellingPrice)}</td>
-                                <td className="py-1.5 text-right font-mono text-[10px] font-bold text-slate-900 whitespace-nowrap">{formatRupiah(it.totalPrice)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <div className="border-t border-slate-100 pt-2.5 mt-2.5 space-y-1 font-sans text-xs">
-                          <div className="flex justify-between font-bold text-slate-900">
-                            <span>Subtotal Belanja:</span>
-                            <span>{formatRupiah(showReceipt.totalSales)}</span>
-                          </div>
-                          <div className="flex justify-between text-slate-500 text-[10px]">
-                            <span>Metode Pembayaran:</span>
-                            <span className="font-semibold text-slate-700">{showReceipt.paymentMethod}</span>
-                          </div>
-                          <div className="flex justify-between text-slate-505 text-slate-500 text-[10px]">
-                            <span>Metode Bayar (Diterima):</span>
-                            <span>{formatRupiah(showReceipt.amountPaid)}</span>
-                          </div>
-                          <div className="flex justify-between text-slate-800 font-medium">
-                            <span>Uang Kembalian:</span>
-                            <span className="font-mono text-slate-900 font-bold">{formatRupiah(showReceipt.change)}</span>
-                          </div>
-                        </div>
-                      </div>
+                    {showReceipt && (
+                      <ReceiptThemeView 
+                        receipt={showReceipt}
+                        profile={profile}
+                        theme={activeTheme}
+                        printMode={printMode}
+                      />
                     )}
-
-                    {/* Dynamic Footer note from settings */}
-                    <div className="text-center font-sans pt-3 border-t border-dashed border-slate-200 mt-2.5">
-                      <p className="font-extrabold text-[9px] text-slate-700 uppercase leading-snug">
-                        {profile.receiptFooter || 'Terima Kasih Atas Kunjungan Anda!'}
-                      </p>
-                      <p className="text-[8px] text-slate-400 mt-0.5">Aplikasi Kasir Mikro HPPOS</p>
-                    </div>
                   </div>
                 </div>
 
-                {/* Hidden duplication that displays ONLY on printing layout page */}
-                <div className="hidden">
-                  <div 
-                    id="actual-print-output" 
-                    className={`print-receipt-section ${printMode === 'thermal' ? 'thermal-receipt-layout font-mono text-black p-2' : 'bg-white text-black p-4 pr-10 font-sans'}`}
-                    style={{ color: '#000000', backgroundColor: '#ffffff' }}
-                  >
-                    <div className="text-center pb-2">
-                      <h4 className="font-bold text-[12px] uppercase">{profile.storeName || 'TOKO MERCHANT SAYA'}</h4>
-                      <p className="text-[9px]">{profile.address || 'Alamat Toko'}</p>
-                      {profile.phone && <p className="text-[9px]">Telp: {profile.phone}</p>}
-                      <p className="text-[9px]">Invoice: {showReceipt.invoiceNumber}</p>
-                      <p className="text-[9px]">Tgl: {new Date(showReceipt.timestamp).toLocaleString('id-ID')}</p>
-                    </div>
-                    <div className="border-t border-dashed border-black py-2">
-                      {showReceipt.items.map((it, idx) => (
-                        <div key={idx} className="flex justify-between text-[10px]">
-                          <span>{it.productName} ({it.quantity}x)</span>
-                          <span>{formatRupiah(it.totalPrice)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="border-t border-dashed border-black pt-2 space-y-1 text-[10px]">
-                      <div className="flex justify-between font-bold">
-                        <span>TOTAL:</span>
-                        <span>{formatRupiah(showReceipt.totalSales)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Bayar:</span>
-                        <span>{formatRupiah(showReceipt.amountPaid)}</span>
-                      </div>
-                      <div className="flex justify-between font-bold">
-                        <span>Kembali:</span>
-                        <span>{formatRupiah(showReceipt.change)}</span>
-                      </div>
-                      <div className="flex justify-between text-[9px]">
-                        <span>Metode:</span>
-                        <span>{showReceipt.paymentMethod}</span>
-                      </div>
-                    </div>
-                    <div className="text-center pt-3 border-t border-dashed border-black mt-2 text-[10px]">
-                      <p className="font-bold">{profile.receiptFooter || 'Terima Kasih!'}</p>
-                      <p className="text-[8px]">Sistem Kasir HPPOS</p>
-                    </div>
-                  </div>
-                </div>
+                 {/* Duplikasi cetak disembunyikan dari modal ini, dipindahkan ke Portal luar agar tidak terpengaruh no-print */}
 
                 {/* Thermal Printer Feedback message */}
                 {thermalStatus && (
-                  <div className="p-2 border border-dashed border-indigo-150 rounded-xl text-center font-mono text-[9px] bg-slate-50 text-slate-700 leading-snug shrink-0 no-print">
+                  <div className="p-2 border border-dashed border-white/10 rounded-xl text-center font-mono text-[9px] bg-slate-950/50 text-indigo-305 text-indigo-300 leading-snug shrink-0 no-print">
                     {thermalStatus}
                   </div>
                 )}
@@ -693,7 +695,7 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
                   <button
                     id="print-btn"
                     onClick={() => window.print()}
-                    className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[10px] font-semibold text-slate-700 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer no-print"
+                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-bold text-slate-200 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer no-print"
                   >
                     <Printer className="w-3.5 h-3.5" />
                     Print Layar
@@ -702,7 +704,7 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
                     id="print-hardware-pos-btn"
                     onClick={handlePrintHardwareThermal}
                     disabled={isPrintingThermal}
-                    className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer no-print disabled:opacity-50"
+                    className="flex-1 py-2.5 bg-emerald-600/15 hover:bg-emerald-600/25 border border-emerald-500/20 text-[10px] font-bold text-emerald-405 text-emerald-404 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer no-print disabled:opacity-50"
                   >
                     <Bluetooth className="w-3 h-3" />
                     Cetak Thermal
@@ -713,7 +715,7 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
                       setShowReceipt(null);
                       setThermalStatus('');
                     }}
-                    className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] rounded-xl transition-all text-center cursor-pointer no-print"
+                    className="flex-1 py-2.5 bg-indigo-650 hover:bg-indigo-700 bg-indigo-600 text-white font-black text-[10px] rounded-xl transition-all text-center cursor-pointer no-print uppercase tracking-wider"
                   >
                     Transaksi Baru
                   </button>
@@ -722,6 +724,123 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
             </div>
           )}
         </AnimatePresence>,
+        document.body
+      )}
+
+      {/* Render portal cetak di luar kontainer modal no-print agar tidak ter-blok saat window.print() */}
+      {showReceipt && typeof window !== 'undefined' && createPortal(
+        <div className="hidden print:block">
+          <div 
+            id="actual-print-output" 
+            className={printMode === 'thermal' ? 'thermal-receipt-layout bg-white text-black p-3 font-mono border border-slate-100' : 'print-receipt-section bg-white text-slate-800 p-4 font-sans text-xs rounded-lg border border-slate-100'}
+            style={{ color: '#000000', backgroundColor: '#ffffff' }}
+          >
+            <ReceiptThemeView 
+              receipt={showReceipt}
+              profile={profile}
+              theme={activeTheme}
+              printMode={printMode}
+              isActualPrint={true}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal Scanner Barcode Kamera */}
+      {isScannerActive && typeof window !== 'undefined' && createPortal(
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center z-[110] p-4 overflow-y-auto no-print">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="glass-panel w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl p-5 space-y-4 focus:outline-hidden"
+          >
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                  <Barcode className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-bold text-white text-sm">Scan Barcode / QR Produk</h3>
+                  <p className="text-[10px] text-slate-400">Deteksi otomatis kode produk lewat kamera</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsScannerActive(false);
+                  setScannerError('');
+                  setScannerSuccessMsg('');
+                }}
+                className="p-1.5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-full transition-colors cursor-pointer"
+                title="Tutup Scanner"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Viewfinder scanner container */}
+            <div className="space-y-3">
+              <div className="text-[10.5px] text-slate-300 leading-normal bg-indigo-950/20 border border-indigo-500/10 p-3 rounded-xl flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                <span>
+                  Arahkan barcode atau QR atau kode ID produk ke area bidik kamera di bawah. Sistem akan <strong>mengeluarkan suara bip</strong> dan otomatis menambahkan produk ke keranjang.
+                </span>
+              </div>
+
+              {/* Success notification banner */}
+              <AnimatePresence>
+                {scannerSuccessMsg && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-bold flex items-center gap-2"
+                  >
+                    <Check className="w-4 h-4 shrink-0" />
+                    <span>{scannerSuccessMsg}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Error notification banner */}
+              <AnimatePresence>
+                {scannerError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-350 text-xs font-semibold flex items-center gap-2"
+                  >
+                    <span className="shrink-0 text-red-400">⚠️</span>
+                    <span>{scannerError}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Injected HTML reader wrapper */}
+              <div 
+                id="pos-barcode-reader" 
+                className="w-full overflow-hidden rounded-xl bg-slate-950 border border-white/5 shadow-inner"
+              />
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsScannerActive(false);
+                  setScannerError('');
+                  setScannerSuccessMsg('');
+                }}
+                className="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-755 border border-white/5 text-slate-300 rounded-xl cursor-pointer transition-all hover:text-white"
+              >
+                Tutup Monitor
+              </button>
+            </div>
+          </motion.div>
+        </div>,
         document.body
       )}
     </div>
