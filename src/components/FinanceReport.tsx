@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Transaction, Product } from '../types';
 import { formatRupiah, formatPercent } from '../utils';
 import { 
@@ -650,188 +651,191 @@ export default function FinanceReport({ transactions, products }: FinanceReportP
       </div>
 
       {/* RECIPE DETAILS MODAL/DRAWER OVERLAY */}
-      <AnimatePresence>
-        {selectedProductDetails && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-slate-900 border border-white/10 rounded-3xl shadow-2xl max-w-2xl w-full text-slate-200 overflow-hidden flex flex-col justify-between max-h-[90vh]"
-            >
-              {/* Modal Banner Header */}
-              <div className="p-5 border-b border-white/5 bg-[#1e293b]/50 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <img 
-                    src={selectedProductDetails.imageUrl} 
-                    alt={selectedProductDetails.name} 
-                    className="w-12 h-12 rounded-xl object-cover border border-white/10 bg-slate-950"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div>
-                    <span className="text-[9px] uppercase font-semibold text-indigo-400 tracking-widest block">
-                      Analisis Struktur Modal Resep
-                    </span>
-                    <h3 className="font-heading font-extrabold text-sm text-white leading-normal">
-                      {selectedProductDetails.name}
-                    </h3>
-                  </div>
-                </div>
-
-                <button
-                  id="close-report-modal"
-                  onClick={() => setSelectedProductDetails(null)}
-                  className="p-1 px-2.5 text-xs text-slate-405 font-bold text-slate-350 hover:text-white bg-white/5 hover:bg-white/10 transition-colors rounded-lg cursor-pointer"
-                >
-                  Tutup
-                </button>
-              </div>
-
-              {/* Modal Contents Scrollable */}
-              <div className="p-6 space-y-6 overflow-y-auto">
-                
-                {/* Cost ratio indicator meters */}
-                <div className="space-y-3.5">
-                  <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-300">
-                    Proporsi Komponen HPP ({formatRupiah(selectedProductDetails.totalHppPerBatch)} / Batch {selectedProductDetails.batchSize} Unit)
-                  </h4>
-
-                  {/* Meter stack percentages */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                    {/* Ingredients cost portion */}
-                    <div className="bg-[#0f172a]/40 border border-white/5 p-3 rounded-2xl">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-semibold text-slate-400">1. Bahan Baku</span>
-                        <strong className="text-white font-mono">
-                          {((selectedProductDetails.totalIngredientsCost / selectedProductDetails.totalHppPerBatch) * 105 - 5).toFixed(0)}%
-                        </strong>
-                      </div>
-                      <span className="text-sm font-mono text-white font-bold block mt-1.5">
-                        {formatRupiah(selectedProductDetails.totalIngredientsCost)}
+      {typeof window !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {selectedProductDetails && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-slate-900 border border-white/10 rounded-3xl shadow-2xl max-w-2xl w-full text-slate-200 overflow-hidden flex flex-col justify-between max-h-[90vh]"
+              >
+                {/* Modal Banner Header */}
+                <div className="p-5 border-b border-white/5 bg-[#1e293b]/50 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <img 
+                      src={selectedProductDetails.imageUrl} 
+                      alt={selectedProductDetails.name} 
+                      className="w-12 h-12 rounded-xl object-cover border border-white/10 bg-slate-950"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div>
+                      <span className="text-[9px] uppercase font-semibold text-indigo-400 tracking-widest block">
+                        Analisis Struktur Modal Resep
                       </span>
-                      <span className="text-[9px] text-slate-405 text-slate-450 block">Formula item mentah</span>
-                    </div>
-
-                    {/* Labor portions */}
-                    <div className="bg-[#0f172a]/40 border border-white/5 p-3 rounded-2xl">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-semibold text-slate-400">2. Jasa / Pembuatan</span>
-                        <strong className="text-white font-mono">
-                          {selectedProductDetails.totalHppPerBatch > 0 ? ((selectedProductDetails.laborCost / selectedProductDetails.totalHppPerBatch) * 100).toFixed(0) : 0}%
-                        </strong>
-                      </div>
-                      <span className="text-sm font-mono text-white font-bold block mt-1.5">
-                        {formatRupiah(selectedProductDetails.laborCost)}
-                      </span>
-                      <span className="text-[9px] text-slate-450 block">Tenaga kerja langsung</span>
-                    </div>
-
-                    {/* Miscellaneous overhead */}
-                    <div className="bg-[#0f172a]/40 border border-white/5 p-3 rounded-2xl">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-semibold text-slate-400">3. Biaya Overhead</span>
-                        <strong className="text-white font-mono">
-                          {selectedProductDetails.totalHppPerBatch > 0 ? ((selectedProductDetails.totalOverheadsCost / selectedProductDetails.totalHppPerBatch) * 105 - 5).toFixed(0) : 0}%
-                        </strong>
-                      </div>
-                      <span className="text-sm font-mono text-white font-bold block mt-1.5">
-                        {formatRupiah(selectedProductDetails.totalOverheadsCost)}
-                      </span>
-                      <span className="text-[9px] text-slate-450 block">Kemasan & operasional</span>
+                      <h3 className="font-heading font-extrabold text-sm text-white leading-normal">
+                        {selectedProductDetails.name}
+                      </h3>
                     </div>
                   </div>
+
+                  <button
+                    id="close-report-modal"
+                    onClick={() => setSelectedProductDetails(null)}
+                    className="p-1 px-2.5 text-xs text-slate-405 font-bold text-slate-350 hover:text-white bg-white/5 hover:bg-white/10 transition-colors rounded-lg cursor-pointer"
+                  >
+                    Tutup
+                  </button>
                 </div>
 
-                {/* Ingredients composition list table */}
-                <div className="space-y-2">
-                  <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-300">
-                    Daftar Takaran Bahan Formula ({selectedProductDetails.ingredients.length} Macam Bahan Baku)
-                  </h4>
-                  <div className="border border-white/5 rounded-2xl overflow-hidden text-xs">
-                    <table className="w-full text-left">
-                      <thead className="bg-white/5 text-[9px] font-bold uppercase text-slate-400 tracking-wide border-b border-white/5">
-                        <tr>
-                          <th className="py-2.5 px-4 text-slate-300">Nama Bahan</th>
-                          <th className="py-2.5 px-3 text-center text-slate-300">Takaran yang Dibutuhkan</th>
-                          <th className="py-2.5 px-3 text-right text-slate-300">Harga Satuan Porsi</th>
-                          <th className="py-2.5 px-4 text-right text-slate-300">Total Biaya Porsi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5 font-medium text-slate-200">
-                        {selectedProductDetails.ingredients.map(item => (
-                          <tr key={item.id} className="hover:bg-white/[0.01]">
-                            <td className="py-2.5 px-4 font-bold text-white">{item.name}</td>
-                            <td className="py-2.5 px-3 text-center">
-                              <span className="font-mono bg-white/5 text-indigo-300 px-2 py-0.5 rounded border border-white/5">
-                                {item.amountNeeded} {item.unit}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-slate-450 text-slate-400">{formatRupiah(item.unitPrice)}</td>
-                            <td className="py-2.5 px-4 text-right font-mono font-bold text-white">{formatRupiah(item.totalCost)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {/* Modal Contents Scrollable */}
+                <div className="p-6 space-y-6 overflow-y-auto">
+                  
+                  {/* Cost ratio indicator meters */}
+                  <div className="space-y-3.5">
+                    <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-300">
+                      Proporsi Komponen HPP ({formatRupiah(selectedProductDetails.totalHppPerBatch)} / Batch {selectedProductDetails.batchSize} Unit)
+                    </h4>
+
+                    {/* Meter stack percentages */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                      {/* Ingredients cost portion */}
+                      <div className="bg-[#0f172a]/40 border border-white/5 p-3 rounded-2xl">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-slate-400">1. Bahan Baku</span>
+                          <strong className="text-white font-mono">
+                            {((selectedProductDetails.totalIngredientsCost / selectedProductDetails.totalHppPerBatch) * 105 - 5).toFixed(0)}%
+                          </strong>
+                        </div>
+                        <span className="text-sm font-mono text-white font-bold block mt-1.5">
+                          {formatRupiah(selectedProductDetails.totalIngredientsCost)}
+                        </span>
+                        <span className="text-[9px] text-slate-405 text-slate-450 block">Formula item mentah</span>
+                      </div>
+
+                      {/* Labor portions */}
+                      <div className="bg-[#0f172a]/40 border border-white/5 p-3 rounded-2xl">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-slate-400">2. Jasa / Pembuatan</span>
+                          <strong className="text-white font-mono">
+                            {selectedProductDetails.totalHppPerBatch > 0 ? ((selectedProductDetails.laborCost / selectedProductDetails.totalHppPerBatch) * 100).toFixed(0) : 0}%
+                          </strong>
+                        </div>
+                        <span className="text-sm font-mono text-white font-bold block mt-1.5">
+                          {formatRupiah(selectedProductDetails.laborCost)}
+                        </span>
+                        <span className="text-[9px] text-slate-455 text-slate-450 block font-normal">Tenaga kerja langsung</span>
+                      </div>
+
+                      {/* Miscellaneous overhead */}
+                      <div className="bg-[#0f172a]/40 border border-white/5 p-3 rounded-2xl">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-slate-400">3. Biaya Overhead</span>
+                          <strong className="text-white font-mono">
+                            {selectedProductDetails.totalHppPerBatch > 0 ? ((selectedProductDetails.totalOverheadsCost / selectedProductDetails.totalHppPerBatch) * 105 - 5).toFixed(0) : 0}%
+                          </strong>
+                        </div>
+                        <span className="text-sm font-mono text-white font-bold block mt-1.5">
+                          {formatRupiah(selectedProductDetails.totalOverheadsCost)}
+                        </span>
+                        <span className="text-[9px] text-slate-450 block">Kemasan & operasional</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
 
-                {/* Overheads composition list */}
-                {selectedProductDetails.overheads.length > 0 && (
+                  {/* Ingredients composition list table */}
                   <div className="space-y-2">
                     <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-300">
-                      Daftar Biaya Penunjang & Kemasan
+                      Daftar Takaran Bahan Formula ({selectedProductDetails.ingredients.length} Macam Bahan Baku)
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                      {selectedProductDetails.overheads.map(ov => (
-                        <div key={ov.id} className="flex justify-between items-center p-2.5 bg-white/[0.01] border border-white/5 rounded-xl">
-                          <span className="font-semibold text-slate-300">{ov.name}</span>
-                          <strong className="font-mono text-white">{formatRupiah(ov.cost)}</strong>
-                        </div>
-                      ))}
+                    <div className="border border-white/5 rounded-2xl overflow-hidden text-xs">
+                      <table className="w-full text-left">
+                        <thead className="bg-white/5 text-[9px] font-bold uppercase text-slate-400 tracking-wide border-b border-white/5">
+                          <tr>
+                            <th className="py-2.5 px-4 text-slate-300">Nama Bahan</th>
+                            <th className="py-2.5 px-3 text-center text-slate-300">Takaran yang Dibutuhkan</th>
+                            <th className="py-2.5 px-3 text-right text-slate-300">Harga Satuan Porsi</th>
+                            <th className="py-2.5 px-4 text-right text-slate-300">Total Biaya Porsi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 font-medium text-slate-200">
+                          {selectedProductDetails.ingredients.map(item => (
+                            <tr key={item.id} className="hover:bg-white/[0.01]">
+                              <td className="py-2.5 px-4 font-bold text-white">{item.name}</td>
+                              <td className="py-2.5 px-3 text-center">
+                                <span className="font-mono bg-white/5 text-indigo-300 px-2 py-0.5 rounded border border-white/5">
+                                  {item.amountNeeded} {item.unit}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono text-slate-400">{formatRupiah(item.unitPrice)}</td>
+                              <td className="py-2.5 px-4 text-right font-mono font-bold text-white">{formatRupiah(item.totalCost)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-                )}
 
-                {/* Pricing profit margin recap */}
-                <div className="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-4 text-xs font-semibold">
-                  <div className="space-y-1 text-center sm:text-left">
-                    <span className="block text-[9px] uppercase font-bold tracking-wide text-indigo-300">HPP vs Harga Jual</span>
-                    <p className="text-slate-304 text-slate-300">
-                      Setiap <strong className="text-white">1 unit {selectedProductDetails.name}</strong> yang terjual menyumbang margin laba sebesar <strong className="text-emerald-400 font-mono">{formatPercent(selectedProductDetails.marginPercent)}</strong>.
-                    </p>
+                  {/* Overheads composition list */}
+                  {selectedProductDetails.overheads.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-300">
+                        Daftar Biaya Penunjang & Kemasan
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                        {selectedProductDetails.overheads.map(ov => (
+                          <div key={ov.id} className="flex justify-between items-center p-2.5 bg-white/[0.01] border border-white/5 rounded-xl">
+                            <span className="font-semibold text-slate-300">{ov.name}</span>
+                            <strong className="font-mono text-white">{formatRupiah(ov.cost)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pricing profit margin recap */}
+                  <div className="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-4 text-xs font-semibold">
+                    <div className="space-y-1 text-center sm:text-left">
+                      <span className="block text-[9px] uppercase font-bold tracking-wide text-indigo-300">HPP vs Harga Jual</span>
+                      <p className="text-slate-300">
+                        Setiap <strong className="text-white">1 unit {selectedProductDetails.name}</strong> yang terjual menyumbang margin laba sebesar <strong className="text-emerald-400 font-mono">{formatPercent(selectedProductDetails.marginPercent)}</strong>.
+                      </p>
+                    </div>
+                    <div className="flex gap-4 font-mono font-bold leading-normal">
+                      <div className="text-center">
+                        <span className="text-[9px] font-sans font-bold uppercase text-slate-400 block tracking-wide">HPP Satuan</span>
+                        <span className="text-white text-sm">{formatRupiah(selectedProductDetails.calculatedHppPerUnit)}</span>
+                      </div>
+                      <div className="text-center">
+                        <span className="text-[9px] font-sans font-bold uppercase text-slate-400 block tracking-wide">Harga Jual</span>
+                        <span className="text-indigo-300 text-sm">{formatRupiah(selectedProductDetails.sellingPrice)}</span>
+                      </div>
+                      <div className="text-center">
+                        <span className="text-[9px] font-sans font-bold uppercase text-slate-400 block tracking-wide">Laba Bersih</span>
+                        <span className="text-emerald-404 text-emerald-400 text-sm">+{formatRupiah(selectedProductDetails.profitAmount)}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-4 font-mono font-bold leading-normal">
-                    <div className="text-center">
-                      <span className="text-[9px] font-sans font-bold uppercase text-slate-400 block tracking-wide">HPP Satuan</span>
-                      <span className="text-white text-sm">{formatRupiah(selectedProductDetails.calculatedHppPerUnit)}</span>
-                    </div>
-                    <div className="text-center">
-                      <span className="text-[9px] font-sans font-bold uppercase text-slate-400 block tracking-wide">Harga Jual</span>
-                      <span className="text-indigo-305 text-indigo-300 text-sm">{formatRupiah(selectedProductDetails.sellingPrice)}</span>
-                    </div>
-                    <div className="text-center">
-                      <span className="text-[9px] font-sans font-bold uppercase text-slate-400 block tracking-wide">Laba Bersih</span>
-                      <span className="text-emerald-450 text-emerald-400 text-sm">+{formatRupiah(selectedProductDetails.profitAmount)}</span>
-                    </div>
-                  </div>
+
                 </div>
 
-              </div>
-
-              {/* Modal actions */}
-              <div className="p-4 border-t border-white/5 bg-[#0f172a]/20 text-right">
-                <button
-                  id="modal-close-recap"
-                  onClick={() => setSelectedProductDetails(null)}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-550 border border-indigo-500/30 text-white font-bold text-xs rounded-xl cursor-pointer transition-all shadow-md"
-                >
-                  Selesai Membaca Laporan
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                {/* Modal actions */}
+                <div className="p-4 border-t border-white/5 bg-[#0f172a]/20 text-right">
+                  <button
+                    id="modal-close-recap"
+                    onClick={() => setSelectedProductDetails(null)}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-550 border border-indigo-500/30 text-white font-bold text-xs rounded-xl cursor-pointer transition-all shadow-md"
+                  >
+                    Selesai Membaca Laporan
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }

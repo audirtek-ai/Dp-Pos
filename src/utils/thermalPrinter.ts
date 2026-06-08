@@ -185,8 +185,11 @@ export async function connectBluetoothDevice(): Promise<PrinterDeviceState> {
         { namePrefix: 'POS' }
       ],
       optionalServices: [
+        '000018f0-0000-1000-8000-00805f9b34fb', // Standard ESC/POS printing
         '0000ff00-0000-1000-8000-00805f9b34fb', // Alternate generic write services
-        'element-printer-service'
+        '0000ffe0-0000-1000-8000-00805f9b34fb', // Common serial BLE modules (HM-10 and others)
+        '0000fee7-0000-1000-8000-00805f9b34fb', // Generic printer/label service
+        '49535343-fe7d-41aa-8eca-2e15f89a40c6'  // Microchip ISSC BLE Serial standard
       ]
     });
 
@@ -228,11 +231,15 @@ export async function connectBluetoothDevice(): Promise<PrinterDeviceState> {
     };
   } catch (err: any) {
     console.error('Bluetooth error:', err);
+    let errorMsg = err.message || 'Gagal menyambung perangkat BT';
+    if (errorMsg.includes('permissions policy') || errorMsg.includes('disallowed') || err.name === 'SecurityError') {
+      errorMsg = 'Keamanan iFrame: Akses Bluetooth diblokir oleh kebijakan keamanan iFrame browser. Silakan buka aplikasi pada Tab Baru (klik ikon Buka di Tab Baru di sudut kanan atas panel pratinjau) untuk menggunakan fitur printer Bluetooth secara langsung!';
+    }
     return {
       type: 'bluetooth',
       name: 'Printer Bluetooth',
       connected: false,
-      error: err.message || 'Gagal menyambung perangkat BT'
+      error: errorMsg
     };
   }
 }
@@ -268,11 +275,15 @@ export async function connectUsbDevice(): Promise<PrinterDeviceState> {
     };
   } catch (err: any) {
     console.error('USB error:', err);
+    let errorMsg = err.message || 'Gagal menyambung USB';
+    if (errorMsg.includes('permissions policy') || errorMsg.includes('disallowed') || err.name === 'SecurityError') {
+      errorMsg = 'Keamanan iFrame: Akses USB diblokir oleh kebijakan keamanan iFrame browser. Silakan buka aplikasi pada Tab Baru (klik ikon Buka di Tab Baru di sudut kanan atas panel pratinjau) untuk menggunakan fitur printer USB secara langsung!';
+    }
     return {
       type: 'usb',
       name: 'USB Printer',
       connected: false,
-      error: err.message || 'Gagal menyambung USB'
+      error: errorMsg
     };
   }
 }

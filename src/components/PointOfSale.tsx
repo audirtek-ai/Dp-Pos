@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Product, CartItem, Transaction, StoreProfile } from '../types';
 import { formatRupiah, formatPercent } from '../utils';
 import { 
@@ -468,258 +469,261 @@ export default function PointOfSale({ products, onAddTransaction, profile }: Poi
       </div>
 
       {/* RETAIL RECEIPT thermal modal overlay */}
-      <AnimatePresence>
-        {showReceipt && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 print-active-overlay">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl border border-slate-300 shadow-2xl max-w-sm w-full p-5 text-slate-800 space-y-4 no-print"
-            >
-              {/* Receipt Header Icon */}
-              <div className="text-center space-y-1 pb-2 border-b border-dashed border-slate-200">
-                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
-                  <Check className="w-5.5 h-5.5" />
+      {typeof window !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showReceipt && (
+            <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center z-[100] p-4 overflow-y-auto no-print">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white rounded-2xl border border-slate-300 shadow-2xl max-w-sm w-full p-5 text-slate-800 space-y-3.5 my-auto max-h-[92vh] flex flex-col justify-between"
+              >
+                {/* Receipt Header Icon */}
+                <div className="text-center space-y-1 pb-1.5 border-b border-dashed border-slate-200 shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                    <Check className="w-5.5 h-5.5" />
+                  </div>
+                  <h3 className="font-heading font-black text-xs text-slate-950 tracking-tight uppercase">
+                    TRANSAKSI SELESAI
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-mono">
+                    {showReceipt.invoiceNumber}
+                  </p>
                 </div>
-                <h3 className="font-heading font-black text-xs text-slate-950 tracking-tight uppercase">
-                  TRANSAKSI SELESAI
-                </h3>
-                <p className="text-[10px] text-slate-400 font-mono">
-                  {showReceipt.invoiceNumber}
-                </p>
-              </div>
 
-              {/* Format selection toggles */}
-              <div className="space-y-1">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Format Cetakan</span>
-                <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
-                  <button 
-                    id="print-mode-standard-btn"
-                    type="button"
-                    onClick={() => setPrintMode('standard')} 
-                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${printMode === 'standard' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-                  >
-                    Nota Standar
-                  </button>
-                  <button 
-                    id="print-mode-thermal-btn"
-                    type="button"
-                    onClick={() => setPrintMode('thermal')} 
-                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${printMode === 'thermal' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-                  >
-                    Printer Thermal (58mm)
-                  </button>
+                {/* Format selection toggles */}
+                <div className="space-y-1 shrink-0">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Format Cetakan</span>
+                  <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+                    <button 
+                      id="print-mode-standard-btn"
+                      type="button"
+                      onClick={() => setPrintMode('standard')} 
+                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${printMode === 'standard' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      Nota Standar
+                    </button>
+                    <button 
+                      id="print-mode-thermal-btn"
+                      type="button"
+                      onClick={() => setPrintMode('thermal')} 
+                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${printMode === 'thermal' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      Printer Thermal (58mm)
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Pseudo Physical Receipt layout viewport container */}
-              <div className="max-h-[300px] overflow-y-auto p-1 bg-slate-50 border border-slate-150 rounded-xl">
-                {/* Print layout section */}
-                <div 
-                  id="print-thermal-receipt"
-                  className={printMode === 'thermal' ? 'thermal-receipt-layout bg-white text-black p-2 font-mono' : 'print-receipt-section bg-white text-slate-800 p-4 font-sans text-xs'}
-                  style={{ color: '#000000', backgroundColor: '#ffffff' }}
-                >
-                  {/* Dynamic Header */}
-                  <div className="text-center pb-2">
-                    <h4 className="font-heading font-black text-xs text-slate-900 uppercase tracking-tight leading-tight">
-                      {profile.storeName || 'TOKO MERCHANT SAYA'}
-                    </h4>
-                    <p className="text-[9px] text-slate-500 font-sans leading-tight mt-0.5" style={{ color: '#4b5563' }}>
-                      {profile.address || 'Alamat Toko Belum Diatur'}
-                    </p>
-                    {profile.phone && (
-                      <p className="text-[9px] text-slate-500 font-sans" style={{ color: '#4b5563' }}>
-                        Telp: {profile.phone}
+                {/* Pseudo Physical Receipt layout viewport container */}
+                <div className="max-h-[220px] sm:max-h-[280px] overflow-y-auto p-1 bg-slate-50 border border-slate-150 rounded-xl flex-1 min-h-[140px]">
+                  {/* Print layout section */}
+                  <div 
+                    id="print-thermal-receipt"
+                    className={printMode === 'thermal' ? 'thermal-receipt-layout bg-white text-black p-2 font-mono' : 'print-receipt-section bg-white text-slate-800 p-3 font-sans text-xs'}
+                    style={{ color: '#000000', backgroundColor: '#ffffff' }}
+                  >
+                    {/* Dynamic Header */}
+                    <div className="text-center pb-2">
+                      <h4 className="font-heading font-black text-xs text-slate-900 uppercase tracking-tight leading-tight">
+                        {profile.storeName || 'TOKO MERCHANT SAYA'}
+                      </h4>
+                      <p className="text-[9px] text-slate-500 font-sans leading-tight mt-0.5" style={{ color: '#4b5563' }}>
+                        {profile.address || 'Alamat Toko Belum Diatur'}
                       </p>
+                      {profile.phone && (
+                        <p className="text-[9px] text-slate-500 font-sans" style={{ color: '#4b5563' }}>
+                          Telp: {profile.phone}
+                        </p>
+                      )}
+                      <div className="text-[8px] text-slate-400 font-mono mt-1.5 border-t border-b border-dashed border-slate-200 py-1" style={{ color: '#6b7280' }}>
+                        INV: {showReceipt.invoiceNumber}<br />
+                        Tgl: {new Date(showReceipt.timestamp).toLocaleString('id-ID')}
+                      </div>
+                    </div>
+
+                    {/* Body dividers */}
+                    {printMode === 'thermal' ? (
+                      <div className="font-mono text-[8.5px] leading-relaxed py-1">
+                        <div className="border-b border-dashed border-slate-300 pb-1 mb-1">
+                          ITEM & JUMLAH
+                        </div>
+                        {showReceipt.items.map((it, idx) => (
+                          <div key={idx} className="space-y-0.5 pb-1 flex justify-between items-start text-black font-mono">
+                            <div className="max-w-[70%]">
+                              <div>{it.productName}</div>
+                              <div className="text-[8px] scale-95 origin-left text-slate-500">
+                                {it.quantity} x {formatRupiah(it.sellingPrice)}
+                              </div>
+                            </div>
+                            <span className="font-bold shrink-0">{formatRupiah(it.totalPrice)}</span>
+                          </div>
+                        ))}
+                        <div className="border-t border-dashed border-slate-300 pt-1.5 mt-1.5 space-y-1">
+                          <div className="flex justify-between font-extrabold text-black">
+                            <span>TOTAL TAGIHAN:</span>
+                            <span>{formatRupiah(showReceipt.totalSales)}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-500 text-[8px]">
+                            <span>Metode:</span>
+                            <span className="uppercase">{showReceipt.paymentMethod}</span>
+                          </div>
+                          <div className="flex justify-between text-[8px] text-slate-600">
+                            <span>Diterima:</span>
+                            <span>{formatRupiah(showReceipt.amountPaid)}</span>
+                          </div>
+                          <div className="flex justify-between text-[8px] text-slate-600">
+                            <span>Kembali:</span>
+                            <span>{formatRupiah(showReceipt.change)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="font-sans leading-relaxed py-1">
+                        <div className="border-b border-slate-100 pb-1.5 mb-1.5 font-bold text-slate-500 text-[9px] uppercase tracking-wider">
+                          Rincian Belanja
+                        </div>
+                        <table className="w-full text-left text-xs border-collapse table-fixed">
+                          <thead>
+                            <tr className="border-b border-slate-100 text-slate-400 text-[9px] uppercase">
+                              <th className="pb-1.5 font-semibold w-1/2">Menu</th>
+                              <th className="pb-1.5 text-center font-semibold w-1/12 font-mono">Qty</th>
+                              <th className="pb-1.5 text-right font-semibold w-[20%]">Harga</th>
+                              <th className="pb-1.5 text-right font-semibold w-[20%]">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {showReceipt.items.map((it, idx) => (
+                              <tr key={idx} className="text-slate-700 align-top">
+                                <td className="py-1.5 pr-2 font-medium text-slate-900 break-words leading-relaxed">{it.productName}</td>
+                                <td className="py-1.5 text-center text-slate-500 font-mono">{it.quantity}</td>
+                                <td className="py-1.5 text-right font-mono text-[10px] text-slate-500 whitespace-nowrap">{formatRupiah(it.sellingPrice)}</td>
+                                <td className="py-1.5 text-right font-mono text-[10px] font-bold text-slate-900 whitespace-nowrap">{formatRupiah(it.totalPrice)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div className="border-t border-slate-100 pt-2.5 mt-2.5 space-y-1 font-sans text-xs">
+                          <div className="flex justify-between font-bold text-slate-900">
+                            <span>Subtotal Belanja:</span>
+                            <span>{formatRupiah(showReceipt.totalSales)}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-500 text-[10px]">
+                            <span>Metode Pembayaran:</span>
+                            <span className="font-semibold text-slate-700">{showReceipt.paymentMethod}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-505 text-slate-500 text-[10px]">
+                            <span>Metode Bayar (Diterima):</span>
+                            <span>{formatRupiah(showReceipt.amountPaid)}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-800 font-medium">
+                            <span>Uang Kembalian:</span>
+                            <span className="font-mono text-slate-900 font-bold">{formatRupiah(showReceipt.change)}</span>
+                          </div>
+                        </div>
+                      </div>
                     )}
-                    <div className="text-[8px] text-slate-400 font-mono mt-1.5 border-t border-b border-dashed border-slate-200 py-1" style={{ color: '#6b7280' }}>
-                      INV: {showReceipt.invoiceNumber}<br />
-                      Tgl: {new Date(showReceipt.timestamp).toLocaleString('id-ID')}
+
+                    {/* Dynamic Footer note from settings */}
+                    <div className="text-center font-sans pt-3 border-t border-dashed border-slate-200 mt-2.5">
+                      <p className="font-extrabold text-[9px] text-slate-700 uppercase leading-snug">
+                        {profile.receiptFooter || 'Terima Kasih Atas Kunjungan Anda!'}
+                      </p>
+                      <p className="text-[8px] text-slate-400 mt-0.5">Aplikasi Kasir Mikro HPPOS</p>
                     </div>
                   </div>
+                </div>
 
-                  {/* Body dividers */}
-                  {printMode === 'thermal' ? (
-                    <div className="font-mono text-[8.5px] leading-relaxed py-1">
-                      <div className="border-b border-dashed border-slate-300 pb-1 mb-1">
-                        ITEM & JUMLAH
-                      </div>
+                {/* Hidden duplication that displays ONLY on printing layout page */}
+                <div className="hidden">
+                  <div 
+                    id="actual-print-output" 
+                    className={`print-receipt-section ${printMode === 'thermal' ? 'thermal-receipt-layout font-mono text-black p-2' : 'bg-white text-black p-4 pr-10 font-sans'}`}
+                    style={{ color: '#000000', backgroundColor: '#ffffff' }}
+                  >
+                    <div className="text-center pb-2">
+                      <h4 className="font-bold text-[12px] uppercase">{profile.storeName || 'TOKO MERCHANT SAYA'}</h4>
+                      <p className="text-[9px]">{profile.address || 'Alamat Toko'}</p>
+                      {profile.phone && <p className="text-[9px]">Telp: {profile.phone}</p>}
+                      <p className="text-[9px]">Invoice: {showReceipt.invoiceNumber}</p>
+                      <p className="text-[9px]">Tgl: {new Date(showReceipt.timestamp).toLocaleString('id-ID')}</p>
+                    </div>
+                    <div className="border-t border-dashed border-black py-2">
                       {showReceipt.items.map((it, idx) => (
-                        <div key={idx} className="space-y-0.5 pb-1 flex justify-between items-start text-black">
-                          <div className="max-w-[70%]">
-                            <div>{it.productName}</div>
-                            <div className="text-[8px] scale-95 origin-left text-slate-500">
-                              {it.quantity} x {formatRupiah(it.sellingPrice)}
-                            </div>
-                          </div>
-                          <span className="font-bold shrink-0">{formatRupiah(it.totalPrice)}</span>
+                        <div key={idx} className="flex justify-between text-[10px]">
+                          <span>{it.productName} ({it.quantity}x)</span>
+                          <span>{formatRupiah(it.totalPrice)}</span>
                         </div>
                       ))}
-                      <div className="border-t border-dashed border-slate-300 pt-1.5 mt-1.5 space-y-1">
-                        <div className="flex justify-between font-extrabold text-black">
-                          <span>TOTAL TAGIHAN:</span>
-                          <span>{formatRupiah(showReceipt.totalSales)}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-500 text-[8px]">
-                          <span>Metode:</span>
-                          <span className="uppercase">{showReceipt.paymentMethod}</span>
-                        </div>
-                        <div className="flex justify-between text-[8px] text-slate-600">
-                          <span>Diterima:</span>
-                          <span>{formatRupiah(showReceipt.amountPaid)}</span>
-                        </div>
-                        <div className="flex justify-between text-[8px] text-slate-600">
-                          <span>Kembali:</span>
-                          <span>{formatRupiah(showReceipt.change)}</span>
-                        </div>
+                    </div>
+                    <div className="border-t border-dashed border-black pt-2 space-y-1 text-[10px]">
+                      <div className="flex justify-between font-bold">
+                        <span>TOTAL:</span>
+                        <span>{formatRupiah(showReceipt.totalSales)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Bayar:</span>
+                        <span>{formatRupiah(showReceipt.amountPaid)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span>Kembali:</span>
+                        <span>{formatRupiah(showReceipt.change)}</span>
+                      </div>
+                      <div className="flex justify-between text-[9px]">
+                        <span>Metode:</span>
+                        <span>{showReceipt.paymentMethod}</span>
                       </div>
                     </div>
-                  ) : (
-                    <div className="font-sans leading-relaxed py-2">
-                      <div className="border-b border-slate-100 pb-2 mb-2 font-bold text-slate-500 text-[10px] uppercase tracking-wider">
-                        Rincian Belanja
-                      </div>
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="border-b border-slate-100 text-slate-400 text-[9px] uppercase">
-                            <th className="pb-1.5 font-semibold">Menu</th>
-                            <th className="pb-1.5 text-center font-semibold">Qty</th>
-                            <th className="pb-1.5 text-right font-semibold">Harga</th>
-                            <th className="pb-1.5 text-right font-semibold">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                          {showReceipt.items.map((it, idx) => (
-                            <tr key={idx} className="text-slate-700">
-                              <td className="py-2 pr-2 font-medium text-slate-900">{it.productName}</td>
-                              <td className="py-2 text-center text-slate-500">{it.quantity}</td>
-                              <td className="py-2 text-right font-mono text-slate-500">{formatRupiah(it.sellingPrice)}</td>
-                              <td className="py-2 text-right font-mono font-bold text-slate-900">{formatRupiah(it.totalPrice)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div className="border-t border-slate-100 pt-3 mt-3 space-y-1 font-sans text-xs">
-                        <div className="flex justify-between font-bold text-slate-900">
-                          <span>Subtotal Belanja:</span>
-                          <span>{formatRupiah(showReceipt.totalSales)}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-500 text-[10px]">
-                          <span>Metode Pembayaran:</span>
-                          <span className="font-semibold text-slate-700">{showReceipt.paymentMethod}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-500 text-[10px]">
-                          <span>Metode Bayar (Diterima):</span>
-                          <span>{formatRupiah(showReceipt.amountPaid)}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-800 font-medium">
-                          <span>Uang Kembalian:</span>
-                          <span className="font-mono text-slate-900 font-bold">{formatRupiah(showReceipt.change)}</span>
-                        </div>
-                      </div>
+                    <div className="text-center pt-3 border-t border-dashed border-black mt-2 text-[10px]">
+                      <p className="font-bold">{profile.receiptFooter || 'Terima Kasih!'}</p>
+                      <p className="text-[8px]">Sistem Kasir HPPOS</p>
                     </div>
-                  )}
-
-                  {/* Dynamic Footer note from settings */}
-                  <div className="text-center font-sans pt-3 border-t border-dashed border-slate-200 mt-2.5">
-                    <p className="font-extrabold text-[9px] text-slate-700 uppercase leading-snug">
-                      {profile.receiptFooter || 'Terima Kasih Atas Kunjungan Anda!'}
-                    </p>
-                    <p className="text-[8px] text-slate-400 mt-0.5">Aplikasi Kasir Mikro HPPOS</p>
                   </div>
                 </div>
-              </div>
 
-              {/* Hidden duplication that displays ONLY on printing layout page */}
-              <div className="hidden">
-                <div 
-                  id="actual-print-output" 
-                  className={`print-receipt-section ${printMode === 'thermal' ? 'thermal-receipt-layout font-mono text-black p-2' : 'bg-white text-black p-4 pr-10 font-sans'}`}
-                  style={{ color: '#000000', backgroundColor: '#ffffff' }}
-                >
-                  <div className="text-center pb-2">
-                    <h4 className="font-bold text-[12px] uppercase">{profile.storeName || 'TOKO MERCHANT SAYA'}</h4>
-                    <p className="text-[9px]">{profile.address || 'Alamat Toko'}</p>
-                    {profile.phone && <p className="text-[9px]">Telp: {profile.phone}</p>}
-                    <p className="text-[9px]">Invoice: {showReceipt.invoiceNumber}</p>
-                    <p className="text-[9px]">Tgl: {new Date(showReceipt.timestamp).toLocaleString('id-ID')}</p>
+                {/* Thermal Printer Feedback message */}
+                {thermalStatus && (
+                  <div className="p-2 border border-dashed border-indigo-150 rounded-xl text-center font-mono text-[9px] bg-slate-50 text-slate-700 leading-snug shrink-0 no-print">
+                    {thermalStatus}
                   </div>
-                  <div className="border-t border-dashed border-black py-2">
-                    {showReceipt.items.map((it, idx) => (
-                      <div key={idx} className="flex justify-between text-[10px]">
-                        <span>{it.productName} ({it.quantity}x)</span>
-                        <span>{formatRupiah(it.totalPrice)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="border-t border-dashed border-black pt-2 space-y-1 text-[10px]">
-                    <div className="flex justify-between font-bold">
-                      <span>TOTAL:</span>
-                      <span>{formatRupiah(showReceipt.totalSales)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Bayar:</span>
-                      <span>{formatRupiah(showReceipt.amountPaid)}</span>
-                    </div>
-                    <div className="flex justify-between font-bold">
-                      <span>Kembali:</span>
-                      <span>{formatRupiah(showReceipt.change)}</span>
-                    </div>
-                    <div className="flex justify-between text-[9px]">
-                      <span>Metode:</span>
-                      <span>{showReceipt.paymentMethod}</span>
-                    </div>
-                  </div>
-                  <div className="text-center pt-3 border-t border-dashed border-black mt-2 text-[10px]">
-                    <p className="font-bold">{profile.receiptFooter || 'Terima Kasih!'}</p>
-                    <p className="text-[8px]">Sistem Kasir HPPOS</p>
-                  </div>
+                )}
+
+                {/* Controls */}
+                <div className="flex gap-1.5 font-sans pt-1 shrink-0">
+                  <button
+                    id="print-btn"
+                    onClick={() => window.print()}
+                    className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[10px] font-semibold text-slate-700 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer no-print"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Print Layar
+                  </button>
+                  <button
+                    id="print-hardware-pos-btn"
+                    onClick={handlePrintHardwareThermal}
+                    disabled={isPrintingThermal}
+                    className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer no-print disabled:opacity-50"
+                  >
+                    <Bluetooth className="w-3 h-3" />
+                    Cetak Thermal
+                  </button>
+                  <button
+                    id="done-receipt-btn"
+                    onClick={() => {
+                      setShowReceipt(null);
+                      setThermalStatus('');
+                    }}
+                    className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] rounded-xl transition-all text-center cursor-pointer no-print"
+                  >
+                    Transaksi Baru
+                  </button>
                 </div>
-              </div>
-
-              {/* Thermal Printer Feedback message */}
-              {thermalStatus && (
-                <div className="p-2.5 border border-dashed border-indigo-150 rounded-xl text-center font-mono text-[9px] bg-slate-50 text-slate-700 leading-snug no-print">
-                  {thermalStatus}
-                </div>
-              )}
-
-              {/* Controls */}
-              <div className="flex gap-1.5 font-sans pt-1">
-                <button
-                  id="print-btn"
-                  onClick={() => window.print()}
-                  className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[10px] font-semibold text-slate-700 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer no-print"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  Print Layar
-                </button>
-                <button
-                  id="print-hardware-pos-btn"
-                  onClick={handlePrintHardwareThermal}
-                  disabled={isPrintingThermal}
-                  className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer no-print disabled:opacity-50"
-                >
-                  <Bluetooth className="w-3 h-3" />
-                  Cetak Thermal
-                </button>
-                <button
-                  id="done-receipt-btn"
-                  onClick={() => {
-                    setShowReceipt(null);
-                    setThermalStatus('');
-                  }}
-                  className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] rounded-xl transition-all text-center cursor-pointer no-print"
-                >
-                  Transaksi Baru
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }
